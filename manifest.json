@@ -8,6 +8,7 @@
     "bookmarks",
     "storage",
     "alarms",
+    "tabs",
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess",
     "offscreen",

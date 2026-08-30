@@ -1,190 +1,239 @@
-// -- DÉTECTION DU SITE --
-const url = window.location.href;
-const isWebtoons = url.includes('webtoons.com');
-const isMangago = url.includes('mangago.me');
-const isAnimeSama = url.includes('anime-sama'); 
-const isBackgroundScrape = new URL(url).searchParams.get('background_scrape') === 'true';
+/**
+ * @fileoverview Script de contenu injecté (Manifest V3) pour Check Anime & Scans.
+ * Détecte la lecture (scroll 90% sur les scans / lecture 75% sur les lecteurs vidéo) et communique avec le background.
+ */
 
-if (isBackgroundScrape && isAnimeSama) {
-    let epNum = null;
-    let coverImage = null;
+(() => {
+    const currentUrl = window.location.href;
+    const isWebtoons = currentUrl.includes('webtoons.com');
+    const isMangago = currentUrl.includes('mangago.me');
+    const isAnimeSama = currentUrl.includes('anime-sama');
+    const isBackgroundScrape = new URL(currentUrl).searchParams.get('background_scrape') === 'true';
 
-    // Extraire l'image de couverture
-    const imgMeta = document.querySelector('meta[property="og:image"]');
-    if (imgMeta) {
-        coverImage = imgMeta.content;
+    // =========================================================================
+    // 1. MODE BACKGROUND SCRAPE (Anime-Sama via Document Offscreen)
+    // =========================================================================
+    if (isBackgroundScrape && isAnimeSama) {
+        handleBackgroundScrape();
+        return;
     }
 
-    const select = document.getElementById("selectEpisodes") || document.getElementById("selectChapitres");
-    if (select) {
-        let maxEp = -1;
-        let type = "Épisode";
-        for (let i = 0; i < select.options.length; i++) {
-            const opt = select.options[i];
-            const match = opt.text.match(/(\d+(?:\.\d+)?)/);
-            if (match) {
-                const num = parseFloat(match[1]);
-                if (num > maxEp) {
-                    maxEp = num;
-                    if (/chapitre/i.test(opt.text)) type = "Chapitre";
-                }
-            }
-        }
-        if (maxEp > -1) epNum = `${type} ${maxEp}`;
-    }
-    
-    // Renvoyer au offscreen
-    chrome.runtime.sendMessage({
-        action: 'offscreenScrapedData',
-        originalUrl: url,
-        data: { text: epNum, image: coverImage }
-    });
-} else {
-    // ==========================================
-    // MODE NORMAL : Suivi de lecture utilisateur
-    // ==========================================
+    // =========================================================================
+    // 2. MODE NORMAL : Suivi de lecture utilisateur
+    // =========================================================================
     let markedAsRead = false;
 
-// 1. Gestion du Scroll (Mangago, Webtoons, & Anime-Sama)
-if (isWebtoons || isMangago || isAnimeSama) {
-    window.addEventListener('scroll', () => {
+    if (isWebtoons || isMangago || isAnimeSama) {
+        initScrollTracker();
+        initAnimeSamaMessageListener();
+        initVideoTracker();
+    }
+
+    /**
+     * Traite le scraping d'Anime-Sama lorsqu'il est chargé dans une iframe offscreen
+     */
+    function handleBackgroundScrape() {
+        let epNum = null;
+        let coverImage = null;
+
+        // Image de couverture
+        const imgMeta = document.querySelector('meta[property="og:image"]');
+        if (imgMeta?.content) {
+            coverImage = imgMeta.content;
+        }
+
+        const select = getAnimeSamaSelectElement();
+        if (select) {
+            let maxEp = -1;
+            let type = "Épisode";
+
+            for (const opt of select.options) {
+                const match = opt.text.match(/(\d+(?:\.\d+)?)/);
+                if (match) {
+                    const num = parseFloat(match[1]);
+                    if (num > maxEp) {
+                        maxEp = num;
+                        if (/chapitre/i.test(opt.text)) type = "Chapitre";
+                    }
+                }
+            }
+            if (maxEp > -1) epNum = `${type} ${maxEp}`;
+        }
+
+        // Renvoyer les données au document offscreen
+        chrome.runtime.sendMessage({
+            action: 'offscreenScrapedData',
+            originalUrl: currentUrl,
+            data: { text: epNum, image: coverImage }
+        });
+    }
+
+    /**
+     * Initialise le tracker de défilement (90% de la hauteur de page)
+     */
+    function initScrollTracker() {
+        let isTicking = false;
+
+        window.addEventListener('scroll', () => {
+            if (markedAsRead || isTicking) return;
+
+            window.requestAnimationFrame(() => {
+                checkScrollProgress();
+                isTicking = false;
+            });
+            isTicking = true;
+        }, { passive: true });
+    }
+
+    /**
+     * Calcule la progression du scroll et envoie la notification de lecture
+     */
+    function checkScrollProgress() {
         if (markedAsRead) return;
-        
+
         const scrollPosition = window.scrollY + window.innerHeight;
         const documentHeight = Math.max(
             document.body.scrollHeight, document.documentElement.scrollHeight,
             document.body.offsetHeight, document.documentElement.offsetHeight,
             document.documentElement.clientHeight
         );
-        
-        // Validation à 90%
+
+        // Validation lorsque l'utilisateur a parcouru au moins 90% de la page
         if (scrollPosition >= documentHeight * 0.9) {
-            
-            let chapterText = "Lu";
-            let isValidPage = false;
-            
-            if (isMangago) {
-                // Le vrai chapitre lu est affiché dans le bouton dropdown #dropdown-chapter-page
-                const dropdown = document.getElementById('dropdown-chapter-page');
-                if (dropdown) {
-                    const match = dropdown.textContent.match(/(\d+(?:\.\d+)?)/);
-                    if (match) chapterText = `Chapitre ${match[1]}`;
-                    isValidPage = true;
-                } else {
-                    // Fallback sur l'URL
-                    const match = url.match(/chapter-?(\d+(?:\.\d+)?)/i);
-                    if (match) {
-                        chapterText = `Chapitre ${match[1]}`;
-                        isValidPage = true;
-                    }
-                }
-            } else if (isWebtoons) {
-                if (url.includes('/viewer')) {
-                    isValidPage = true;
-                }
-                
-                let num = "";
-                // Extraire le numéro réel depuis l'URL
-                const numMatch = url.match(/episode_no=(\d+)/i) || url.match(/episode-?(\d+)/i);
-                if (numMatch) num = numMatch[1];
-                
-                // Extraire le titre stylisé (S2 Ep.47) depuis le DOM
-                let title = "";
-                // On utilise uniquement .subj_episode car .subj récupère le nom du manga (ex: "Killer Reborn")
-                const subj = document.querySelector('.subj_episode, h1.subj_episode');
-                if (subj && subj.textContent.trim() !== '') {
-                    title = subj.textContent.trim();
-                } else if (num) {
-                    title = `Épisode ${num}`;
-                } else {
-                    title = "Lu";
-                }
-                
-                if (num) {
-                    chapterText = `${title} |#${num}|`;
-                } else {
-                    chapterText = title;
-                }
-            } else if (isAnimeSama) {
-                // Pour Anime-Sama, on lit le select
-                const select = document.getElementById("selectEpisodes") || document.getElementById("selectChapitres");
-                // Sécurité : On s'assure qu'on est bien sur la page de lecture et non sur l'index (qui contient aussi le select)
-                const isViewer = url.includes('/scan/') || url.includes('/saison-') || url.includes('/ep-') || url.includes('/chapitre-');
-                
-                if (select && isViewer) {
-                    isValidPage = true;
-                    const selectedOpt = select.options[select.selectedIndex];
-                    if (selectedOpt) {
-                        const match = selectedOpt.text.match(/(\d+(?:\.\d+)?)/);
-                        if (match) {
-                            const isChap = /chapitre/i.test(selectedOpt.text);
-                            chapterText = `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
-                        }
-                    }
-                }
-            }
-            
-            // On ne valide que si on est sur une vraie page de chapitre et qu'on a pu extraire quelque chose
-            if (isValidPage && chapterText !== "Lu" && chapterText !== "") {
-                markedAsRead = true; // On bloque les futurs envois sur cette page
+            const result = extractCurrentChapterOrEpisode();
+
+            if (result.isValid && result.chapterText && result.chapterText !== 'Lu') {
+                markedAsRead = true;
                 chrome.runtime.sendMessage({
                     action: 'markAsRead',
-                    url: url, // On envoie l'URL courante
-                    progressText: chapterText
+                    url: currentUrl,
+                    progressText: result.chapterText
                 });
             }
         }
-    });
-}
+    }
 
-// Écouteur pour récupérer l'épisode Anime-Sama depuis la page parente
-if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
-    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        if (request.action === "getAnimeSamaEpisode") {
-            let epNum = null;
-            // On essaie de lire le selecteur d'épisodes
-            const select = document.getElementById("selectEpisodes") || document.getElementById("selectChapitres");
-            if (select) {
+    /**
+     * Extrait le chapitre ou épisode en cours de lecture selon le site actif
+     * @returns {{ isValid: boolean, chapterText: string }}
+     */
+    function extractCurrentChapterOrEpisode() {
+        let chapterText = 'Lu';
+        let isValid = false;
+
+        if (isMangago) {
+            const dropdown = document.getElementById('dropdown-chapter-page');
+            if (dropdown) {
+                const match = dropdown.textContent.match(/(\d+(?:\.\d+)?)/);
+                if (match) chapterText = `Chapitre ${match[1]}`;
+                isValid = true;
+            } else {
+                const match = currentUrl.match(/chapter-?(\d+(?:\.\d+)?)/i);
+                if (match) {
+                    chapterText = `Chapitre ${match[1]}`;
+                    isValid = true;
+                }
+            }
+        } else if (isWebtoons) {
+            if (currentUrl.includes('/viewer')) {
+                isValid = true;
+            }
+
+            let num = '';
+            const numMatch = currentUrl.match(/episode_no=(\d+)/i) || currentUrl.match(/episode-?(\d+)/i);
+            if (numMatch) num = numMatch[1];
+
+            let title = '';
+            const subj = document.querySelector('.subj_episode, h1.subj_episode');
+            if (subj && subj.textContent.trim()) {
+                title = subj.textContent.trim();
+            } else if (num) {
+                title = `Épisode ${num}`;
+            } else {
+                title = 'Lu';
+            }
+
+            chapterText = num ? `${title} |#${num}|` : title;
+        } else if (isAnimeSama) {
+            const select = getAnimeSamaSelectElement();
+            const isViewer = currentUrl.includes('/scan/') || currentUrl.includes('/saison-') || currentUrl.includes('/ep-') || currentUrl.includes('/chapitre-');
+
+            if (select && isViewer) {
+                isValid = true;
                 const selectedOpt = select.options[select.selectedIndex];
                 if (selectedOpt) {
                     const match = selectedOpt.text.match(/(\d+(?:\.\d+)?)/);
                     if (match) {
                         const isChap = /chapitre/i.test(selectedOpt.text);
-                        epNum = `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
+                        chapterText = `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
                     }
                 }
             }
-            sendResponse({ episodeText: epNum });
         }
-    });
-}
 
-// 2. Gestion de la Vidéo (Anime-Sama ou iframe tiers)
-const videoInterval = setInterval(() => {
-    if (markedAsRead) {
-        clearInterval(videoInterval);
-        return;
+        return { isValid, chapterText };
     }
 
-    const video = document.querySelector('video');
-    if (video) {
-        
-        video.addEventListener('timeupdate', () => {
-            if (markedAsRead || !video.duration) return;
-            
-            const progress = video.currentTime / video.duration;
-            if (progress >= 0.75) {
-                markedAsRead = true;
-                clearInterval(videoInterval);
-                
-                // On envoie le message. Le background va utiliser sender.tab.url pour trouver le favori.
-                chrome.runtime.sendMessage({
-                    action: 'markAsReadVideo'
-                });
+    /**
+     * Retourne le sélecteur d'épisodes/chapitres d'Anime-Sama
+     * @returns {HTMLSelectElement|null}
+     */
+    function getAnimeSamaSelectElement() {
+        return document.getElementById("selectEpisodes") || document.getElementById("selectChapitres");
+    }
+
+    /**
+     * Écouteur pour transmettre l'épisode Anime-Sama actif au Service Worker
+     */
+    function initAnimeSamaMessageListener() {
+        if (!chrome?.runtime?.onMessage) return;
+
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            if (request.action === "getAnimeSamaEpisode") {
+                let epNum = null;
+                const select = getAnimeSamaSelectElement();
+                if (select) {
+                    const selectedOpt = select.options[select.selectedIndex];
+                    if (selectedOpt) {
+                        const match = selectedOpt.text.match(/(\d+(?:\.\d+)?)/);
+                        if (match) {
+                            const isChap = /chapitre/i.test(selectedOpt.text);
+                            epNum = `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
+                        }
+                    }
+                }
+                sendResponse({ episodeText: epNum });
             }
         });
-        clearInterval(videoInterval); // Vidéo trouvée, on arrête la boucle de recherche
     }
-}, 2000);
 
-} // Fin du bloc else (!isBackgroundScrape)
+    /**
+     * Initialise le suivi de lecture pour les lecteurs vidéo HTML5
+     */
+    function initVideoTracker() {
+        let attempts = 0;
+        const maxAttempts = 15; // 30 secondes max
+
+        const videoInterval = setInterval(() => {
+            if (markedAsRead || ++attempts > maxAttempts) {
+                clearInterval(videoInterval);
+                return;
+            }
+
+            const video = document.querySelector('video');
+            if (video) {
+                clearInterval(videoInterval);
+
+                video.addEventListener('timeupdate', () => {
+                    if (markedAsRead || !video.duration) return;
+
+                    // Marquage à 75% du visionnage
+                    if ((video.currentTime / video.duration) >= 0.75) {
+                        markedAsRead = true;
+                        chrome.runtime.sendMessage({ action: 'markAsReadVideo' });
+                    }
+                }, { passive: true });
+            }
+        }, 2000);
+    }
+})();
