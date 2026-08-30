@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "Check Anime & Scans",
+  "short_name": "Check Scans",
+  "version": "1.0",
+  "description": "Vérifie les nouveaux épisodes et chapitres de vos favoris (Animes et Scans).",
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "alarms",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "offscreen",
+    "notifications",
+    "contextMenus"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "icons": {
+    "16": "icons/favicon16.png",
+    "48": "icons/favicon48.png",
+    "128": "icons/favicon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content/content.js"],
+      "all_frames": true
+    }
+  ]
+}

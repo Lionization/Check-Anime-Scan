@@ -1,0 +1,310 @@
+:root {
+    --bg-color: #0f172a;
+    --text-color: #f8fafc;
+    --text-muted: #94a3b8;
+    --card-bg: #1e293b;
+    --card-hover: #334155;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --accent: #ef4444;
+    --border: #334155;
+    --radius: 8px;
+    --font-family: system-ui, -apple-system, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    width: 600px;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    display: flex;
+    flex-direction: column;
+    max-height: 500px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--card-bg);
+}
+
+.header h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    font-weight: 600;
+}
+
+.btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    color: var(--text-color);
+    background: var(--card-hover);
+}
+
+.btn-icon:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.content {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Search */
+.search-container {
+    margin-bottom: 16px;
+}
+
+#search-input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#search-input:focus {
+    border-color: var(--primary);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Spinner */
+#loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 0;
+    color: var(--text-muted);
+}
+
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid var(--card-hover);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Empty State */
+#empty-state {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-muted);
+}
+
+.empty-icon {
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+/* Columns */
+.columns-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.column h2 {
+    font-size: 1rem;
+    margin: 0 0 12px 0;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+}
+
+.column-empty {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 16px 0;
+    font-style: italic;
+    margin: 0;
+}
+
+/* List */
+.updates-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px; /* Réduit (était 12px) pour condenser la liste */
+}
+
+.update-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px; /* Un peu réduit pour l'image */
+    display: flex;
+    justify-content: flex-start; /* Changé de space-between */
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.item-cover {
+    width: 40px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background-color: var(--bg-color);
+}
+
+.update-item:hover, .update-item:focus-visible {
+    background: var(--card-hover);
+    transform: translateY(-2px);
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.update-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px; /* Réduit (était 4px) */
+    overflow: hidden;
+    flex-grow: 1; /* Prend l'espace restant */
+}
+
+.update-title {
+    font-weight: 600;
+    font-size: 0.9rem; /* Légèrement réduit (était 0.95rem) */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.update-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge-new {
+    background: var(--accent);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.update-actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.btn-mark-read {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-mark-read:hover {
+    color: #10b981; /* Vert succès */
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.btn-undo-read {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-undo-read:hover {
+    color: #f59e0b; /* Orange avertissement */
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.footer {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    background: var(--card-bg);
+}
+
+.btn-primary {
+    width: 100%;
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+    background: var(--card-hover);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
