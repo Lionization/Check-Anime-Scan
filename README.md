@@ -1,20 +1,22 @@
-<div align="center">
+<p align="center">
+  <img src="./assets/icon-transparent.png" alt="Check Anime & Scans Logo" width="120" />
+</p>
 
-  <img src="assets/icon-transparent.png" alt="Check Anime & Scans Logo" width="100" height="100" />
+<h1 align="center">Check Anime & Scans</h1>
 
-  # Check Anime & Scans
+<p align="center">
+  <strong>Extension Google Chrome moderne pour tracker et vérifier automatiquement les sorties d'animes et de scans.</strong>
+</p>
 
-  **Extension Google Chrome moderne pour tracker et vérifier automatiquement les sorties d'animes et de scans.**
+<p align="center">
+  <img src="https://img.shields.io/badge/Manifest-V3-blue.svg" alt="Manifest V3" />
+  <img src="https://img.shields.io/badge/Platform-Google%20Chrome-orange.svg" alt="Google Chrome" />
+  <img src="https://img.shields.io/badge/Status-Active-success.svg" alt="Status" />
+</p>
 
-  [![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-  [![Platform](https://img.shields.io/badge/Platform-Google%20Chrome-orange.svg)](https://www.google.com/chrome/)
-  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+---
 
-  <br />
-
-  <img src="assets/promo-banner.jpg" alt="Check Anime & Scans Banner" width="100%" />
-
-</div>
+![Bannière Promo Check Anime & Scans](./assets/promo-banner.jpg)
 
 ---
 
@@ -45,8 +47,8 @@
 
 ```text
 check-anime-scan/
-├── assets/          # Visuels haute définition (logo transparent, bannière promo)
-├── background/      # Adaptateurs de scraping et logique de détection en tâche de fond
+├── assets/          # Visuels HD (logo transparent, bannière promo)
+├── background/      # Adaptateurs de scraping et service worker
 ├── background.js    # Service Worker (Manifest V3)
 ├── content/         # Scripts de contenu injectés
 ├── icons/           # Déclinaisons d'icônes (16px, 48px, 128px, 500px)
