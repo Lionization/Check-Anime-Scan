@@ -238,9 +238,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             li.appendChild(a);
             
-            // Le clic ne marque plus comme lu automatiquement, on s'en remet au script de contenu (scroll/video)
-            a.addEventListener('click', () => {
-                // On peut optionnellement fermer la popup
+            // Ouverture en arrière-plan sans fermer la popup
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                chrome.tabs.create({ url: item.url, active: false });
             });
 
             if (item.category === 'ANIMES') {
