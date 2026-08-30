@@ -322,23 +322,44 @@
     /* --- Boutons d'action unitaire --- */
     .btn-mark-read,
     .btn-undo-read {
-        padding: 6px;
+        width: 30px;
+        height: 30px;
+        padding: 0;
         border-radius: var(--radius-full);
-        color: var(--text-muted);
-        transition: color var(--transition-fast), background var(--transition-fast);
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
+        cursor: pointer;
+        transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
     }
 
-    .btn-mark-read:hover {
-        color: var(--success);
-        background: color-mix(in srgb, var(--success) 12%, transparent);
+    .btn-mark-read {
+        color: #34d399;
+        background-color: color-mix(in srgb, var(--success) 16%, var(--card-bg));
+        border: 1px solid color-mix(in srgb, var(--success) 45%, transparent);
+
+        &:hover, &:focus-visible {
+            color: #ffffff;
+            background-color: var(--success);
+            border-color: var(--success);
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+        }
     }
 
-    .btn-undo-read:hover {
-        color: var(--warning);
-        background: color-mix(in srgb, var(--warning) 12%, transparent);
+    .btn-undo-read {
+        color: #fbbf24;
+        background-color: color-mix(in srgb, var(--warning) 16%, var(--card-bg));
+        border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+
+        &:hover, &:focus-visible {
+            color: #ffffff;
+            background-color: var(--warning);
+            border-color: var(--warning);
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.45);
+        }
     }
 
     /* --- Bouton principal footer --- */
