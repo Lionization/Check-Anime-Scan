@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/promo-banner.png" alt="Bannière Promo Check Anime & Scans" width="100%" />
+  <img src="./assets/promo-banner.jpg" alt="Bannière Promo Check Anime & Scans" width="100%" />
 </p>
 
 ---
