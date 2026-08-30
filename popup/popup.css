@@ -147,6 +147,12 @@
             gap: 10px;
         }
 
+        & .header-titles {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
         & .header-controls {
             display: flex;
             align-items: center;
@@ -154,16 +160,23 @@
         }
 
         & .header-icon {
-            width: 22px;
-            height: 22px;
+            width: 24px;
+            height: 24px;
             border-radius: var(--radius-sm);
             flex-shrink: 0;
         }
 
         & h1 {
-            font-size: 1.05rem;
+            font-size: 0.95rem;
             font-weight: 700;
             letter-spacing: 0.2px;
+            line-height: 1.2;
+        }
+
+        & .header-subtitle {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            line-height: 1.1;
         }
     }
 
