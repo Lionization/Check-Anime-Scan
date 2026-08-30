@@ -179,10 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         metaDiv.appendChild(stateSpan);
 
         if (item.isNew) {
-            const newBadge = document.createElement('span');
-            newBadge.className = 'badge-new';
-            newBadge.textContent = 'Nouveau';
-            metaDiv.appendChild(newBadge);
+            a.classList.add('is-new');
         }
 
         infoDiv.appendChild(metaDiv);

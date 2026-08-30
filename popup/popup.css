@@ -301,15 +301,19 @@
             gap: 6px;
         }
 
-        & .badge-new {
-            background: var(--accent);
-            color: #ffffff;
-            font-size: 0.65rem;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: var(--radius-full);
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
+        /* Style discret pour les nouveautés non lues */
+        &.is-new {
+            background-color: color-mix(in srgb, var(--primary) 7%, var(--card-bg));
+            border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+            border-left: 3px solid var(--primary);
+
+            & .update-title {
+                color: #ffffff;
+            }
+
+            & .update-meta b {
+                color: #60a5fa;
+            }
         }
 
         & .update-actions {
