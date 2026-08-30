@@ -30,26 +30,80 @@ body {
 }
 
 .header {
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    background: var(--card-bg);
+    overflow: hidden;
+}
+
+.header-banner-container {
+    position: relative;
+    width: 100%;
+    height: 100px;
+    overflow: hidden;
+}
+
+.header-banner-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 30%;
+    display: block;
+    filter: brightness(0.85) contrast(1.05);
+}
+
+.header-banner-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(15, 23, 42, 0.2) 0%,
+        rgba(15, 23, 42, 0.75) 75%,
+        rgba(15, 23, 42, 0.95) 100%
+    );
+    pointer-events: none;
+}
+
+.header-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--card-bg);
+    padding: 10px 16px;
+    z-index: 1;
+}
+
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.header-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    flex-shrink: 0;
 }
 
 .header h1 {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     margin: 0;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
 .btn-icon {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-color);
     cursor: pointer;
-    padding: 8px;
+    padding: 6px;
     border-radius: 50%;
     transition: all 0.2s ease;
     display: flex;
@@ -58,8 +112,9 @@ body {
 }
 
 .btn-icon:hover {
-    color: var(--text-color);
-    background: var(--card-hover);
+    color: white;
+    background: var(--primary);
+    border-color: var(--primary);
 }
 
 .btn-icon:disabled {
