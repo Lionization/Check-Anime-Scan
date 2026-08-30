@@ -1,5 +1,5 @@
 /**
- * @fileoverview Logique de scraping et de détection de mises à jour pour Check Anime & Scans.
+ * @fileoverview Logique de scraping concurrente et résiliente pour Check Anime & Scans.
  */
 
 import { parseAnimeSama } from './adapters/anime-sama.js';
@@ -11,39 +11,42 @@ import {
     cleanTitle, 
     extractEpisodeNumber, 
     updateBadgeCount, 
-    findTargetBookmarkFolders 
+    findTargetBookmarkFolders,
+    getAppSettings,
+    runWithConcurrency
 } from '../utils.js';
 
 /**
- * Parcourt les favoris ciblés, extrait le dernier épisode/chapitre et met à jour le storage et le badge.
+ * Parcourt les favoris configurés en parallèle, extrait les derniers chapitres/épisodes et met à jour le storage et le badge.
  */
 export async function checkBookmarksForUpdates() {
     try {
+        const settings = await getAppSettings();
         const bookmarks = await chrome.bookmarks.getTree();
         const targets = [];
-        findTargetBookmarkFolders(bookmarks, CONSTANTS.TARGET_FOLDERS, targets);
+        findTargetBookmarkFolders(bookmarks, settings.targetFolders, targets);
         
         const updates = {};
         const storedAll = await chrome.storage.sync.get(null);
 
-        for (const bookmark of targets) {
-            if (!bookmark.url) continue;
+        // Traitement parallèle par lots de 5 requêtes simultanées
+        await runWithConcurrency(targets, 5, async (bookmark) => {
+            if (!bookmark?.url) return;
 
             const scrapedResult = await scrapePage(bookmark.url);
-            if (!scrapedResult) continue;
+            if (!scrapedResult) return;
 
             const title = cleanTitle(bookmark.title);
             const rawState = typeof scrapedResult === 'string' ? scrapedResult : scrapedResult.text;
             let currentState = decodeHTMLEntities(rawState);
             let imageUrl = typeof scrapedResult === 'object' && scrapedResult.image ? scrapedResult.image : null;
 
-            // Récupération de l'état précédemment stocké
+            // Récupération de l'état stocké précédemment
             const stored = storedAll[bookmark.id];
             let userProgress = currentState;
             let isNew = false;
 
             if (stored) {
-                // Conservation de l'image si celle-ci n'a pas pu être re-extraite
                 if (!imageUrl && stored.image) {
                     imageUrl = stored.image;
                 }
@@ -55,8 +58,7 @@ export async function checkBookmarksForUpdates() {
                 const numCurrent = extractEpisodeNumber(currentState);
 
                 if (numCurrent > numUser) {
-                    if (!stored?.isNew) {
-                        // Alerte notification de nouveauté
+                    if (!stored?.isNew && settings.notificationsEnabled) {
                         chrome.notifications.create({
                             type: 'basic',
                             iconUrl: imageUrl || CONSTANTS.DEFAULT_ICON,
@@ -66,9 +68,7 @@ export async function checkBookmarksForUpdates() {
                     }
                     isNew = true;
                 } else if (numCurrent < numUser) {
-                    // Si l'utilisateur est plus avancé que la source distante (ex: cache CDN du site source)
                     if (numUser > 10000 && numCurrent < 10000) {
-                        // Réinitialisation en cas d'identifiant aberrant
                         userProgress = currentState;
                     } else {
                         isNew = false;
@@ -91,7 +91,7 @@ export async function checkBookmarksForUpdates() {
                 isNew: isNew,
                 timestamp: Date.now()
             };
-        }
+        });
 
         // Sauvegarde de l'état synchronisé
         await chrome.storage.sync.set(updates);
@@ -100,9 +100,9 @@ export async function checkBookmarksForUpdates() {
         const currentData = await chrome.storage.sync.get(null);
         await updateBadgeCount(currentData);
 
-        // Nettoyage des anciens favoris supprimés
+        // Nettoyage des favoris supprimés
         const validIds = targets.map(b => b.id);
-        const keysToRemove = Object.keys(currentData).filter(key => !validIds.includes(key));
+        const keysToRemove = Object.keys(currentData).filter(key => key !== CONSTANTS.SETTINGS_STORAGE_KEY && !validIds.includes(key));
         if (keysToRemove.length > 0) {
             await chrome.storage.sync.remove(keysToRemove);
         }
@@ -113,18 +113,28 @@ export async function checkBookmarksForUpdates() {
 }
 
 /**
- * Effectue la requête HTTP et délègue au bon parseur selon le domaine
+ * Effectue la requête HTTP avec timeout AbortController et délègue au bon adaptateur
  * @param {string} url URL cible
  * @returns {Promise<{ text: string, image?: string }|string|null>}
  */
 async function scrapePage(url) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 secondes max par requête
+
     try {
-        const response = await fetch(url, { cache: 'no-cache' });
-        const text = await response.text();
-        
         if (url.includes('anime-sama.')) {
+            clearTimeout(timeoutId);
             return await scrapeAnimeSamaViaOffscreen(url);
         }
+
+        const response = await fetch(url, { 
+            cache: 'no-cache',
+            signal: controller.signal 
+        });
+        clearTimeout(timeoutId);
+
+        const text = await response.text();
+        
         if (url.includes('webtoons.com')) {
             return parseWebtoons(text);
         }
@@ -134,13 +144,16 @@ async function scrapePage(url) {
         
         return null;
     } catch (e) {
-        console.warn(`Impossible de scraper l'URL: ${url}`, e);
+        clearTimeout(timeoutId);
+        if (e.name !== 'AbortError') {
+            console.warn(`Impossible de scraper l'URL: ${url}`, e);
+        }
         return null;
     }
 }
 
 /**
- * Prépare et crée le document invisible Offscreen si nécessaire
+ * Configure le document invisible Offscreen si nécessaire
  * @param {string} path Chemin du document HTML offscreen
  */
 async function setupOffscreenDocument(path) {

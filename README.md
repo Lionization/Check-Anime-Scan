@@ -22,11 +22,14 @@
 
 ## ✨ Fonctionnalités clés
 
-- ⚡ **Vérification automatique en arrière-plan** : Détection des nouveaux épisodes et chapitres à intervalles réguliers.
+- ⚡ **Scraping Parallèle Haute Performance** : Vérification ultra-rapide par lots concurrents avec timeout `AbortController`.
+- 📁 **Dossiers de Favoris Ciblés Dynamiques** : Scanne automatiquement vos favoris Chrome (`ANIMES`, `SCANS`, ou tout dossier personnalisé ajouté via les options).
+- 🕒 **Indication du Temps Relatif** : Repérez immédiatement la fraîcheur des sorties (*« Il y a 15 min »*, *« Hier »*).
 - 🎯 **Organisation duale Anime / Scan** : Affichage séparé et structuré dans la popup pour distinguer vos séries vidéo et vos lectures de manga / webtoon.
-- 🔔 **Compteur & Badges dynamiques** : Badge numérique sur l'icône de l'extension pour ne manquer aucune sortie.
+- 🔔 **Notifications & Badges dynamiques** : Badge numérique sur l'icône et alertes Chrome personnalisables.
+- ⚙️ **Page d'Options Complète** : Réglage de la fréquence de scan (1h, 2h, 4h, 8h, 12h), gestion des dossiers ciblés et export/import de sauvegarde JSON.
 - 🎨 **Interface Dark Mode soignée** : Thème sombre inspiré de l'univers cyber/anime avec affichage des jaquettes (*covers*).
-- 👁️ **Gestion des lectures** : Marquage rapide comme lu / non lu individuel ou groupé.
+- 👁️ **Gestion des lectures** : Marquage rapide comme lu / non lu individuel ou groupé, sans fermer la popup lors de l'ouverture des liens.
 
 ---
 
@@ -53,6 +56,9 @@ check-anime-scan/
 ├── content/         # Scripts de contenu injectés
 ├── icons/           # Déclinaisons d'icônes (16px, 48px, 128px, 500px)
 ├── offscreen/       # Document offscreen pour le parsing DOM
-├── popup/           # Interface utilisateur (HTML5 / CSS3 / Vanilla JS)
+├── options/         # Page des paramètres & options utilisateur
+├── popup/           # Interface utilisateur popup (HTML5 / CSS3 / JS)
+├── utils.js         # Module central de fonctions partagées
+├── test-adapters.mjs# Suite de tests automatisés (npm test)
 └── manifest.json    # Déclaration de l'extension Chrome MV3
 ```

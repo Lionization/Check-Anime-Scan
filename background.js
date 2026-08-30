@@ -111,12 +111,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 /**
  * Configure l'alarme périodique de vérification en arrière-plan
  */
-function setupAlarm() {
-    chrome.alarms.get(CONSTANTS.ALARM_NAME, (alarm) => {
-        if (!alarm) {
-            chrome.alarms.create(CONSTANTS.ALARM_NAME, { periodInMinutes: CONSTANTS.ALARM_INTERVAL_MINUTES });
-        }
-    });
+async function setupAlarm() {
+    try {
+        const { getAppSettings } = await import('./utils.js');
+        const settings = await getAppSettings();
+        chrome.alarms.clear(CONSTANTS.ALARM_NAME, () => {
+            chrome.alarms.create(CONSTANTS.ALARM_NAME, { periodInMinutes: settings.checkInterval });
+            console.log(`Alarme configurée toutes les ${settings.checkInterval} minutes.`);
+        });
+    } catch (e) {
+        chrome.alarms.create(CONSTANTS.ALARM_NAME, { periodInMinutes: CONSTANTS.DEFAULT_INTERVAL_MINUTES });
+    }
 }
 
 // Déclencheur d'alarme
@@ -130,7 +135,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'forceCheck') {
         checkBookmarksForUpdates().then(() => sendResponse({ status: 'done' }));
-        return true; // Réponse asynchrone
+        return true;
+    }
+    
+    if (request.action === 'reconfigureAlarm') {
+        setupAlarm().then(() => sendResponse({ status: 'alarm_updated' }));
+        return true;
     }
     
     if (request.action === 'markAsRead' || request.action === 'markAsReadVideo') {

@@ -2,7 +2,7 @@
  * @fileoverview Contrôleur de l'interface utilisateur de la Popup pour Check Anime & Scans.
  */
 
-import { decodeHTMLEntities, cleanStateDisplay, updateBadgeCount } from '../utils.js';
+import { decodeHTMLEntities, cleanStateDisplay, updateBadgeCount, formatRelativeTime } from '../utils.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Éléments du DOM
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyEl = document.getElementById('empty-state');
     const loadingEl = document.getElementById('loading');
     const refreshBtn = document.getElementById('refresh-btn');
+    const optionsBtn = document.getElementById('options-btn');
     const markAllReadBtn = document.getElementById('mark-all-read-btn');
     const searchInput = document.getElementById('search-input');
 
@@ -23,6 +24,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialisation
     loadData();
+
+    // Ouverture des options
+    if (optionsBtn) {
+        optionsBtn.addEventListener('click', () => {
+            if (chrome.runtime.openOptionsPage) {
+                chrome.runtime.openOptionsPage();
+            } else {
+                window.open(chrome.runtime.getURL('options/options.html'));
+            }
+        });
+    }
 
     // Recherche dynamique filtrée
     searchInput.addEventListener('input', (e) => {
@@ -177,6 +189,15 @@ document.addEventListener('DOMContentLoaded', () => {
             stateSpan.textContent = cleanStateDisplay(item.latestState || item.lastState);
         }
         metaDiv.appendChild(stateSpan);
+
+        // Affichage du temps relatif
+        const relativeTime = formatRelativeTime(item.timestamp);
+        if (relativeTime) {
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'update-time';
+            timeSpan.textContent = `• ${relativeTime}`;
+            metaDiv.appendChild(timeSpan);
+        }
 
         if (item.isNew) {
             a.classList.add('is-new');

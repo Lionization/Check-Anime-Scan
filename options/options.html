@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Anime & Scans — Paramètres & Options</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+    <div class="options-container">
+        <header class="options-header">
+            <div class="brand">
+                <img src="../icons/favicon48.png" alt="Logo" class="logo" width="36" height="36">
+                <div>
+                    <h1>Check Anime & Scans</h1>
+                    <p class="subtitle">Paramètres généraux et gestion des favoris ciblés</p>
+                </div>
+            </div>
+        </header>
+
+        <main class="options-content">
+            <!-- Section 1 : Dossiers de favoris ciblés -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>📁 Dossiers de Favoris Ciblés</h2>
+                    <p class="card-desc">L'extension scanne automatiquement les liens contenus dans ces dossiers de vos favoris Chrome.</p>
+                </div>
+                <div class="card-body">
+                    <div id="folders-list" class="folders-tags" aria-live="polite"></div>
+                    <form id="add-folder-form" class="add-folder-form">
+                        <input type="text" id="new-folder-input" placeholder="Nom du dossier (ex: MANHWAS, EN COURS...)" autocomplete="off" required>
+                        <button type="submit" class="btn btn-secondary">+ Ajouter</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Section 2 : Synchronisation en arrière-plan -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>⏱️ Fréquence de Vérification</h2>
+                    <p class="card-desc">Intervalle entre chaque vérification automatique des nouveaux épisodes et chapitres.</p>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="interval-select">Fréquence du scan en arrière-plan :</label>
+                        <select id="interval-select" class="select-control">
+                            <option value="60">Toutes les 1 heure</option>
+                            <option value="120">Toutes les 2 heures</option>
+                            <option value="240" selected>Toutes les 4 heures (Recommandé)</option>
+                            <option value="480">Toutes les 8 heures</option>
+                            <option value="720">Toutes les 12 heures</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3 : Notifications -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>🔔 Notifications Bureau</h2>
+                    <p class="card-desc">Recevoir une notification système Chrome lorsqu'un nouvel épisode ou chapitre est détecté.</p>
+                </div>
+                <div class="card-body">
+                    <label class="switch-label" for="notifications-toggle">
+                        <span class="switch-text">Activer les alertes de notification</span>
+                        <div class="switch">
+                            <input type="checkbox" id="notifications-toggle" checked>
+                            <span class="slider"></span>
+                        </div>
+                    </label>
+                </div>
+            </section>
+
+            <!-- Section 4 : Sauvegarde & Restauration -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>💾 Sauvegarde & Restauration</h2>
+                    <p class="card-desc">Exportez ou importez votre historique de lecture et vos réglages dans un fichier JSON.</p>
+                </div>
+                <div class="card-body backup-actions">
+                    <button id="export-btn" class="btn btn-outline">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Exporter la sauvegarde (JSON)
+                    </button>
+                    <button id="import-trigger-btn" class="btn btn-outline">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        Importer une sauvegarde (JSON)
+                    </button>
+                    <input type="file" id="import-file-input" accept=".json" class="hidden">
+                </div>
+            </section>
+        </main>
+
+        <footer class="options-footer">
+            <button id="save-btn" class="btn btn-primary">Enregistrer les paramètres</button>
+        </footer>
+
+        <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    </div>
+
+    <script type="module" src="options.js"></script>
+</body>
+</html>

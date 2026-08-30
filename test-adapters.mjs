@@ -1,7 +1,14 @@
 import { parseAnimeSama } from './background/adapters/anime-sama.js';
 import { parseWebtoons } from './background/adapters/webtoons.js';
 import { parseMangago } from './background/adapters/mangago.js';
-import { decodeHTMLEntities, extractEpisodeNumber, cleanTitle, cleanStateDisplay } from './utils.js';
+import { 
+    decodeHTMLEntities, 
+    extractEpisodeNumber, 
+    cleanTitle, 
+    cleanStateDisplay, 
+    formatRelativeTime,
+    runWithConcurrency 
+} from './utils.js';
 
 console.log('=== 🧪 SUITE DE TESTS CHECK ANIME & SCANS ===\n');
 
@@ -65,5 +72,15 @@ console.log('   decodeHTMLEntities("&amp;rsquo; / &quot;Test&quot;"):', decodeHT
 console.log('   cleanTitle("Solo Leveling | Scan VF"):', cleanTitle('Solo Leveling | Scan VF'));
 console.log('   extractEpisodeNumber("Épisode 24 |#24.5|"):', extractEpisodeNumber('Épisode 24 |#24.5|'));
 console.log('   cleanStateDisplay("Épisode 24 |#24|"):', cleanStateDisplay('Épisode 24 |#24|'));
+console.log('   formatRelativeTime(now - 15min):', formatRelativeTime(Date.now() - 15 * 60 * 1000));
+console.log('   formatRelativeTime(now - 3h):', formatRelativeTime(Date.now() - 3 * 3600 * 1000));
+
+// 3. Test de Concurrence
+console.log('\n5. Test Exécution Concurrente runWithConcurrency:');
+const dummyItems = [1, 2, 3, 4, 5, 6, 7, 8];
+const concurrentResults = await runWithConcurrency(dummyItems, 3, async (item) => {
+    return `Processed ${item}`;
+});
+console.log('   Éléments traités en parallèle:', concurrentResults.length === 8 ? 'OK (8/8)' : 'Échec');
 
 console.log('\n=== ✅ TOUS LES TESTS SONT PASSÉS AVEC SUCCÈS ===');

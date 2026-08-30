@@ -147,6 +147,12 @@
             gap: 10px;
         }
 
+        & .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         & .header-icon {
             width: 22px;
             height: 22px;
@@ -299,6 +305,12 @@
             display: flex;
             align-items: center;
             gap: 6px;
+
+            & .update-time {
+                font-size: 0.72rem;
+                color: var(--text-muted);
+                opacity: 0.75;
+            }
         }
 
         /* Style discret orangé / ambré pour les nouveautés non lues */
