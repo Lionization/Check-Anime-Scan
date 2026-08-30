@@ -160,43 +160,58 @@ async function scrapePage(url) {
     }
 }
 
+// Verrous et file d'attente pour le document Offscreen (Chromium n'autorise qu'un seul document offscreen)
+let creatingOffscreenPromise = null;
+let offscreenScrapeQueue = Promise.resolve();
+
 /**
- * Configure le document invisible Offscreen si nécessaire
+ * Configure le document invisible Offscreen si nécessaire de manière thread-safe (singleton)
  * @param {string} path Chemin du document HTML offscreen
  */
 async function setupOffscreenDocument(path) {
     if (await chrome.offscreen.hasDocument()) return;
     
-    await chrome.offscreen.createDocument({
-        url: path,
-        reasons: ['DOM_PARSER'],
-        justification: 'Scraping de pages avec protection navigateur'
-    });
+    if (!creatingOffscreenPromise) {
+        creatingOffscreenPromise = chrome.offscreen.createDocument({
+            url: path,
+            reasons: ['DOM_PARSER'],
+            justification: 'Scraping de pages avec protection navigateur'
+        }).finally(() => {
+            creatingOffscreenPromise = null;
+        });
+    }
+    
+    await creatingOffscreenPromise;
 }
 
 /**
- * Exécute le scraping Anime-Sama via le document Offscreen isolé
+ * Exécute le scraping Anime-Sama via le document Offscreen isolé avec file d'attente séquentielle
  * @param {string} url URL de la page Anime-Sama
  * @returns {Promise<{ text: string, image?: string }|string|null>}
  */
 async function scrapeAnimeSamaViaOffscreen(url) {
-    try {
-        await setupOffscreenDocument('offscreen/offscreen.html');
-        
-        return new Promise((resolve) => {
-            chrome.runtime.sendMessage({
-                action: 'scrapeViaOffscreen',
-                url: url
-            }, (response) => {
-                if (chrome.runtime.lastError || !response?.result) {
-                    resolve("Fallback (Erreur réseau)");
-                } else {
-                    resolve(response.result);
-                }
-            });
+    return new Promise((resolve) => {
+        offscreenScrapeQueue = offscreenScrapeQueue.then(async () => {
+            try {
+                await setupOffscreenDocument('offscreen/offscreen.html');
+                
+                const result = await new Promise((res) => {
+                    chrome.runtime.sendMessage({
+                        action: 'scrapeViaOffscreen',
+                        url: url
+                    }, (response) => {
+                        if (chrome.runtime.lastError || !response?.result) {
+                            res("Fallback (Erreur réseau)");
+                        } else {
+                            res(response.result);
+                        }
+                    });
+                });
+                resolve(result);
+            } catch (e) {
+                console.error("Erreur lors du scraping Offscreen:", e);
+                resolve(null);
+            }
         });
-    } catch (e) {
-        console.error("Erreur lors du scraping Offscreen:", e);
-        return null;
-    }
+    });
 }
