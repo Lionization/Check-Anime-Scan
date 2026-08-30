@@ -81,6 +81,14 @@ export async function checkBookmarksForUpdates() {
                 isNew = stored?.isNew || false;
             }
 
+            // Gestion intelligente du timestamp : on conserve la date précédente sauf si une nouveauté est détectée
+            let itemTimestamp = stored?.timestamp || Date.now();
+            if (isNew && !stored?.isNew) {
+                itemTimestamp = Date.now();
+            } else if (stored?.latestState && stored.latestState !== currentState) {
+                itemTimestamp = Date.now();
+            }
+
             updates[bookmark.id] = {
                 title: title,
                 url: bookmark.url,
@@ -89,7 +97,7 @@ export async function checkBookmarksForUpdates() {
                 latestState: currentState,
                 image: imageUrl,
                 isNew: isNew,
-                timestamp: Date.now()
+                timestamp: itemTimestamp
             };
         });
 
