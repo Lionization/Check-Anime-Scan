@@ -149,6 +149,51 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 /**
+ * Vérifie si une URL de favori correspond à l'URL de l'onglet actif
+ * @param {string} favUrlStr 
+ * @param {string} currentUrlStr 
+ * @returns {boolean}
+ */
+function isMatchingBookmarkUrl(favUrlStr, currentUrlStr) {
+    try {
+        const favUrl = new URL(favUrlStr);
+        const currentUrl = new URL(currentUrlStr);
+
+        // Cas 1 : Anime-Sama (support multi-domaines .fr, .si, .me, etc. et slugs de catalogue)
+        if (favUrl.hostname.includes('anime-sama') && currentUrl.hostname.includes('anime-sama')) {
+            const favSlug = favUrl.pathname.match(/\/catalogue\/([^/]+)/i);
+            const currSlug = currentUrl.pathname.match(/\/catalogue\/([^/]+)/i);
+            if (favSlug && currSlug) {
+                return favSlug[1].toLowerCase() === currSlug[1].toLowerCase();
+            }
+            const cleanFav = favUrl.pathname.replace(/\/$/, '');
+            return currentUrl.pathname.includes(cleanFav);
+        }
+
+        // Cas 2 : Webtoons
+        if (favUrl.hostname.includes('webtoons.com') && currentUrl.hostname.includes('webtoons.com')) {
+            const favTitleNo = favUrl.searchParams.get('title_no');
+            const currentTitleNo = currentUrl.searchParams.get('title_no');
+            if (favTitleNo && currentTitleNo && favTitleNo === currentTitleNo) {
+                return true;
+            }
+            const basePath = favUrl.pathname.replace(/\/list\/?$/, '');
+            return currentUrl.pathname.includes(basePath);
+        }
+
+        // Cas 3 : Autres plateformes
+        if (favUrl.hostname === currentUrl.hostname) {
+            const cleanFavPath = favUrl.pathname.replace(/\/$/, '');
+            return currentUrl.pathname.includes(cleanFavPath);
+        }
+
+        return false;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Marque un élément comme lu et synchronise les états
  */
 async function handleMarkAsRead(request, sender) {
@@ -159,7 +204,8 @@ async function handleMarkAsRead(request, sender) {
 
     if (request.action === 'markAsReadVideo' && sender.tab) {
         try {
-            const response = await chrome.tabs.sendMessage(sender.tab.id, { action: "getAnimeSamaEpisode" });
+            // Envoi ciblé au top frame (frameId: 0) qui contient le DOM principal d'Anime-Sama
+            const response = await chrome.tabs.sendMessage(sender.tab.id, { action: "getAnimeSamaEpisode" }, { frameId: 0 });
             if (response?.episodeText) {
                 progressText = response.episodeText;
             }
@@ -175,39 +221,10 @@ async function handleMarkAsRead(request, sender) {
 
         for (const key in data) {
             const item = data[key];
-            if (item?.url) {
-                try {
-                    const favUrl = new URL(item.url);
-                    const currentUrl = new URL(tabUrl);
-                    
-                    let isMatch = false;
-                    
-                    if (favUrl.hostname === currentUrl.hostname) {
-                        if (favUrl.hostname.includes('webtoons.com')) {
-                            const favTitleNo = favUrl.searchParams.get('title_no');
-                            const currentTitleNo = currentUrl.searchParams.get('title_no');
-                            if (favTitleNo && currentTitleNo && favTitleNo === currentTitleNo) {
-                                isMatch = true;
-                            } else {
-                                const basePath = favUrl.pathname.replace(/\/list\/?$/, '');
-                                if (currentUrl.pathname.includes(basePath)) {
-                                    isMatch = true;
-                                }
-                            }
-                        } else {
-                            const cleanFavPath = favUrl.pathname.replace(/\/$/, '');
-                            if (currentUrl.pathname.includes(cleanFavPath)) {
-                                isMatch = true;
-                            }
-                        }
-                    }
-                    
-                    if (isMatch) {
-                        matchedKey = key;
-                        matchedItem = item;
-                        break;
-                    }
-                } catch (e) {}
+            if (item?.url && isMatchingBookmarkUrl(item.url, tabUrl)) {
+                matchedKey = key;
+                matchedItem = item;
+                break;
             }
         }
 
@@ -221,8 +238,10 @@ async function handleMarkAsRead(request, sender) {
                 matchedItem.isNew = false;
             } else if (matchedItem.userProgress === matchedItem.latestState) {
                 matchedItem.isNew = false;
+            } else if (!numLatest && progressText) {
+                matchedItem.isNew = false;
             } else {
-                matchedItem.isNew = true;
+                matchedItem.isNew = (numUser < numLatest);
             }
 
             await chrome.storage.sync.set({ [matchedKey]: matchedItem });

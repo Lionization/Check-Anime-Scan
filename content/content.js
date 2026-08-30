@@ -18,16 +18,16 @@
         return;
     }
 
-    // =========================================================================
     // 2. MODE NORMAL : Suivi de lecture utilisateur
-    // =========================================================================
     let markedAsRead = false;
 
     if (isWebtoons || isMangago || isAnimeSama) {
         initScrollTracker();
         initAnimeSamaMessageListener();
-        initVideoTracker();
     }
+
+    // Le tracker vidéo doit s'exécuter dans tous les contextes (notamment les iframes de lecteurs tiers)
+    initVideoTracker();
 
     /**
      * Traite le scraping d'Anime-Sama lorsqu'il est chargé dans une iframe offscreen
@@ -93,13 +93,15 @@
 
         const scrollPosition = window.scrollY + window.innerHeight;
         const documentHeight = Math.max(
-            document.body.scrollHeight, document.documentElement.scrollHeight,
-            document.body.offsetHeight, document.documentElement.offsetHeight,
-            document.documentElement.clientHeight
+            document.body ? document.body.scrollHeight : 0,
+            document.documentElement ? document.documentElement.scrollHeight : 0,
+            document.body ? document.body.offsetHeight : 0,
+            document.documentElement ? document.documentElement.offsetHeight : 0,
+            document.documentElement ? document.documentElement.clientHeight : 0
         );
 
         // Validation lorsque l'utilisateur a parcouru au moins 90% de la page
-        if (scrollPosition >= documentHeight * 0.9) {
+        if (documentHeight > 0 && scrollPosition >= documentHeight * 0.9) {
             const result = extractCurrentChapterOrEpisode();
 
             if (result.isValid && result.chapterText && result.chapterText !== 'Lu') {
@@ -156,7 +158,7 @@
             chapterText = num ? `${title} |#${num}|` : title;
         } else if (isAnimeSama) {
             const select = getAnimeSamaSelectElement();
-            const isViewer = currentUrl.includes('/scan/') || currentUrl.includes('/saison-') || currentUrl.includes('/ep-') || currentUrl.includes('/chapitre-');
+            const isViewer = currentUrl.includes('/scan/') || currentUrl.includes('/saison') || currentUrl.includes('/ep-') || currentUrl.includes('/chapitre-');
 
             if (select && isViewer) {
                 isValid = true;
@@ -179,7 +181,41 @@
      * @returns {HTMLSelectElement|null}
      */
     function getAnimeSamaSelectElement() {
-        return document.getElementById("selectEpisodes") || document.getElementById("selectChapitres");
+        return document.getElementById("selectEpisodes") || 
+               document.getElementById("selectChapitres") || 
+               document.querySelector('select[id*="episode" i]') || 
+               document.querySelector('select[id*="chapitre" i]');
+    }
+
+    /**
+     * Extrait l'identifiant de l'épisode ou chapitre courant sur Anime-Sama
+     * @returns {string|null}
+     */
+    function extractAnimeSamaEpisodeText() {
+        const select = getAnimeSamaSelectElement();
+        if (select && select.selectedIndex >= 0) {
+            const selectedOpt = select.options[select.selectedIndex];
+            if (selectedOpt) {
+                const match = selectedOpt.text.match(/(\d+(?:\.\d+)?)/);
+                if (match) {
+                    const isChap = /chapitre/i.test(selectedOpt.text);
+                    return `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
+                }
+            }
+        }
+
+        // Recherche dans l'URL si aucun select actif n'est présent
+        const urlMatch = currentUrl.match(/(?:ep|episode|chapitre|ch)[-_]?(\d+(?:\.\d+)?)/i);
+        if (urlMatch) {
+            const isChap = /chapitre|ch/i.test(urlMatch[0]);
+            return `${isChap ? 'Chapitre' : 'Épisode'} ${urlMatch[1]}`;
+        }
+
+        if (/film|movie/i.test(currentUrl) || /film/i.test(document.title)) {
+            return "Film";
+        }
+
+        return null;
     }
 
     /**
@@ -190,50 +226,74 @@
 
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (request.action === "getAnimeSamaEpisode") {
-                let epNum = null;
-                const select = getAnimeSamaSelectElement();
-                if (select) {
-                    const selectedOpt = select.options[select.selectedIndex];
-                    if (selectedOpt) {
-                        const match = selectedOpt.text.match(/(\d+(?:\.\d+)?)/);
-                        if (match) {
-                            const isChap = /chapitre/i.test(selectedOpt.text);
-                            epNum = `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
-                        }
-                    }
-                }
+                const epNum = extractAnimeSamaEpisodeText();
                 sendResponse({ episodeText: epNum });
             }
         });
     }
 
     /**
-     * Initialise le suivi de lecture pour les lecteurs vidéo HTML5
+     * Initialise le suivi de lecture pour les lecteurs vidéo HTML5 (dans le frame principal et les iframes)
      */
     function initVideoTracker() {
-        let attempts = 0;
-        const maxAttempts = 15; // 30 secondes max
+        /** @type {WeakSet<HTMLVideoElement>} */
+        const trackedVideos = new WeakSet();
+        let lastMarkedVideoSrc = '';
 
-        const videoInterval = setInterval(() => {
-            if (markedAsRead || ++attempts > maxAttempts) {
-                clearInterval(videoInterval);
-                return;
-            }
+        function attachToVideo(video) {
+            if (!video || trackedVideos.has(video)) return;
+            trackedVideos.add(video);
 
-            const video = document.querySelector('video');
-            if (video) {
-                clearInterval(videoInterval);
+            const checkAndNotify = () => {
+                const videoSrc = video.currentSrc || video.src || currentUrl;
+                if (lastMarkedVideoSrc && lastMarkedVideoSrc === videoSrc) return;
 
-                video.addEventListener('timeupdate', () => {
-                    if (markedAsRead || !video.duration) return;
+                const duration = video.duration;
+                const isFinished = video.ended || (duration > 0 && (video.currentTime / duration) >= 0.75);
 
-                    // Marquage à 75% du visionnage
-                    if ((video.currentTime / video.duration) >= 0.75) {
-                        markedAsRead = true;
-                        chrome.runtime.sendMessage({ action: 'markAsReadVideo' });
+                if (isFinished) {
+                    lastMarkedVideoSrc = videoSrc;
+                    chrome.runtime.sendMessage({ action: 'markAsReadVideo' });
+                }
+            };
+
+            video.addEventListener('timeupdate', checkAndNotify, { passive: true });
+            video.addEventListener('ended', checkAndNotify, { passive: true });
+        }
+
+        // Observer les vidéos déjà présentes
+        document.querySelectorAll('video').forEach(attachToVideo);
+
+        // Observer les vidéos insérées dynamiquement dans le DOM
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    if (node.tagName === 'VIDEO') {
+                        attachToVideo(node);
+                    } else if (node.querySelectorAll) {
+                        node.querySelectorAll('video').forEach(attachToVideo);
                     }
-                }, { passive: true });
+                }
             }
+        });
+
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelectorAll('video').forEach(attachToVideo);
+                if (document.body) {
+                    observer.observe(document.body, { childList: true, subtree: true });
+                }
+            });
+        }
+
+        // Vérification de secours périodique pendant les premières secondes
+        let checkCount = 0;
+        const backupInterval = setInterval(() => {
+            document.querySelectorAll('video').forEach(attachToVideo);
+            if (++checkCount >= 10) clearInterval(backupInterval);
         }, 2000);
     }
 })();
