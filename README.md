@@ -1,40 +1,56 @@
-# 🔍 Check Anime & Scans
+<div align="center">
 
-![Check Anime & Scans Banner](assets/promo-banner.jpg)
+  <img src="assets/icon-transparent.png" alt="Check Anime & Scans Logo" width="100" height="100" />
 
-> Extension Chrome pour vérifier et suivre automatiquement les nouveaux épisodes d'animes et chapitres de scans/mangas depuis vos favoris.
+  # Check Anime & Scans
+
+  **Extension Google Chrome moderne pour tracker et vérifier automatiquement les sorties d'animes et de scans.**
+
+  [![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+  [![Platform](https://img.shields.io/badge/Platform-Google%20Chrome-orange.svg)](https://www.google.com/chrome/)
+  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+  <br />
+
+  <img src="assets/promo-banner.jpg" alt="Check Anime & Scans Banner" width="100%" />
+
+</div>
 
 ---
 
-## ✨ Fonctionnalités
+## ✨ Fonctionnalités clés
 
-- ⚡ **Détection automatique** : Vérifie en arrière-plan la sortie de nouveaux épisodes et chapitres.
-- 🎯 **Dualité Animes & Scans** : Organisation claire et séparée des sorties (colonnes Animes et Scans).
-- 🔔 **Notifications & Badges** : Badge de compteur sur l'icône de l'extension et alertes visuelles.
-- 🎨 **Interface Moderne & Sombre** : Design épuré, navigation fluide et ergonomique avec couverture des œuvres.
-- 👁️ **Gestion des statuts** : Marquer comme lu / non lu individuellement ou en lot.
+- ⚡ **Vérification automatique en arrière-plan** : Détection des nouveaux épisodes et chapitres à intervalles réguliers.
+- 🎯 **Organisation duale Anime / Scan** : Affichage séparé et structuré dans la popup pour distinguer vos séries vidéo et vos lectures de manga / webtoon.
+- 🔔 **Compteur & Badges dynamiques** : Badge numérique sur l'icône de l'extension pour ne manquer aucune sortie.
+- 🎨 **Interface Dark Mode soignée** : Thème sombre inspiré de l'univers cyber/anime avec affichage des jaquettes (*covers*).
+- 👁️ **Gestion des lectures** : Marquage rapide comme lu / non lu individuel ou groupé.
 
 ---
 
 ## 🚀 Installation (Mode Développeur)
 
-1. Clonez ce dépôt sur votre machine :
+1. **Cloner le dépôt** :
    ```bash
    git clone git@github.com:Lionization/Check-Anime-Scan.git
    ```
-2. Ouvrez Google Chrome et rendez-vous sur `chrome://extensions/`.
-3. Activez le **Mode développeur** (en haut à droite).
+2. Ouvrez Google Chrome et accédez à : `chrome://extensions/`
+3. Activez le **Mode développeur** (interrupteur en haut à droite).
 4. Cliquez sur **Charger l'extension non empaquetée** (*Load unpacked*).
 5. Sélectionnez le dossier du projet `check-anime-scan`.
 
 ---
 
-## 🛠️ Architecture
+## 📁 Architecture du Projet
 
-- `manifest.json` : Configuration Manifest V3 de l'extension Chrome.
-- `background/` & `background.js` : Service worker de synchronisation et alarmes.
-- `content/` : Scripts de contenu pour interagir avec les sites sources.
-- `popup/` : Interface utilisateur (HTML5, CSS3, Vanilla JS).
-- `offscreen/` : Document offscreen pour le parsing DOM en arrière-plan.
-- `icons/` : Icônes transparentes de l'extension (16px, 48px, 128px, 500px).
-- `assets/` : Ressources graphiques haute résolution.
+```text
+check-anime-scan/
+├── assets/          # Visuels haute définition (logo transparent, bannière promo)
+├── background/      # Adaptateurs de scraping et logique de détection en tâche de fond
+├── background.js    # Service Worker (Manifest V3)
+├── content/         # Scripts de contenu injectés
+├── icons/           # Déclinaisons d'icônes (16px, 48px, 128px, 500px)
+├── offscreen/       # Document offscreen pour le parsing DOM
+├── popup/           # Interface utilisateur (HTML5 / CSS3 / Vanilla JS)
+└── manifest.json    # Déclaration de l'extension Chrome MV3
+```
