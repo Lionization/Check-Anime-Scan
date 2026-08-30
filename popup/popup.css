@@ -326,8 +326,8 @@
     /* --- Boutons d'action unitaire --- */
     .btn-mark-read,
     .btn-undo-read {
-        width: 30px;
-        height: 30px;
+        width: 22px;
+        height: 22px;
         padding: 0;
         border-radius: var(--radius-full);
         display: flex;
