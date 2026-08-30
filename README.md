@@ -14,9 +14,9 @@
   <img src="https://img.shields.io/badge/Status-Active-success.svg" alt="Status" />
 </p>
 
----
-
-![Bannière Promo Check Anime & Scans](./assets/promo-banner.jpg)
+<p align="center">
+  <img src="./assets/promo-banner.png" alt="Bannière Promo Check Anime & Scans" width="100%" />
+</p>
 
 ---
 
