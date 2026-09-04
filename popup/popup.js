@@ -63,18 +63,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 newData[key].isNew = false;
             }
         }
-        await chrome.storage.sync.set(newData);
+        await chrome.storage.local.set(newData);
         await updateBadgeCount(newData);
         renderList(newData, searchInput.value.toLowerCase().trim());
     });
 
     /**
-     * Charge les données depuis chrome.storage.sync
+     * Charge les données depuis chrome.storage.local
      */
     async function loadData() {
         setLoading(true);
         try {
-            const data = await chrome.storage.sync.get(null);
+            const data = await chrome.storage.local.get(null);
             currentUpdates = data || {};
             renderList(currentUpdates, searchInput.value.toLowerCase().trim());
         } catch (error) {
@@ -93,7 +93,10 @@ document.addEventListener('DOMContentLoaded', () => {
         animesList.innerHTML = '';
         scansList.innerHTML = '';
         
-        let items = Object.values(data).filter(item => item?.title);
+        // Optimisation O(N) : conservation de la clé directe dès l'extraction
+        let items = Object.entries(data)
+            .filter(([_, item]) => item?.title)
+            .map(([key, item]) => ({ ...item, _key: key }));
         
         if (searchQuery) {
             items = items.filter(item => item.title.toLowerCase().includes(searchQuery));
@@ -121,18 +124,24 @@ document.addEventListener('DOMContentLoaded', () => {
         let animeCount = 0;
         let scanCount = 0;
 
-        items.forEach(item => {
-            const key = Object.keys(data).find(k => data[k] === item);
-            const cardElement = createUpdateItemElement(item, key);
+        // Optimisation DOM : DocumentFragment pour insérer les cartes en un seul batch atomique
+        const animeFragment = document.createDocumentFragment();
+        const scanFragment = document.createDocumentFragment();
+
+        for (const item of items) {
+            const cardElement = createUpdateItemElement(item, item._key);
 
             if (item.category === 'ANIMES') {
-                animesList.appendChild(cardElement);
+                animeFragment.appendChild(cardElement);
                 animeCount++;
             } else {
-                scansList.appendChild(cardElement);
+                scanFragment.appendChild(cardElement);
                 scanCount++;
             }
-        });
+        }
+
+        animesList.appendChild(animeFragment);
+        scansList.appendChild(scanFragment);
 
         animesEmpty.classList.toggle('hidden', animeCount > 0);
         scansEmpty.classList.toggle('hidden', scanCount > 0);
@@ -184,7 +193,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item.userProgress && item.userProgress !== item.latestState) {
             const cleanProg = cleanStateDisplay(item.userProgress);
             const cleanLat = cleanStateDisplay(item.latestState);
-            stateSpan.innerHTML = `<span style="color: var(--text-muted);">${cleanProg} ➔</span> <b>${cleanLat}</b>`;
+
+            const progSpan = document.createElement('span');
+            progSpan.style.color = 'var(--text-muted)';
+            progSpan.textContent = `${cleanProg} ➔ `;
+
+            const latestB = document.createElement('b');
+            latestB.textContent = cleanLat;
+
+            stateSpan.appendChild(progSpan);
+            stateSpan.appendChild(latestB);
         } else {
             stateSpan.textContent = cleanStateDisplay(item.latestState || item.lastState);
         }
@@ -228,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 newData[key].previousProgress = newData[key].userProgress;
                 newData[key].userProgress = newData[key].latestState;
 
-                await chrome.storage.sync.set(newData);
+                await chrome.storage.local.set(newData);
                 await updateBadgeCount(newData);
                 renderList(newData, searchInput.value.toLowerCase().trim());
             });
@@ -250,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 newData[key].userProgress = newData[key].previousProgress;
                 newData[key].isNew = true;
 
-                await chrome.storage.sync.set(newData);
+                await chrome.storage.local.set(newData);
                 await updateBadgeCount(newData);
                 renderList(newData, searchInput.value.toLowerCase().trim());
             });

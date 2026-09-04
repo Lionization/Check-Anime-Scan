@@ -4,12 +4,12 @@
  */
 
 import { checkBookmarksForUpdates } from './background/scraper.js';
-import { CONSTANTS, extractEpisodeNumber, updateBadgeCount } from './utils.js';
+import { CONSTANTS, extractEpisodeNumber, updateBadgeCount, getAppSettings } from './utils.js';
 
 // Initialisation à l'installation ou mise à jour de l'extension
 chrome.runtime.onInstalled.addListener(async () => {
     console.log("Extension installée, configuration de l'alarme et des menus.");
-    await migrateToSync();
+    await restoreBadge();
     setupAlarm();
     setupContextMenus();
     checkBookmarksForUpdates();
@@ -17,26 +17,20 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Initialisation au démarrage du navigateur
 chrome.runtime.onStartup.addListener(async () => {
-    await migrateToSync();
+    await restoreBadge();
     setupAlarm();
-    setupContextMenus();
     checkBookmarksForUpdates();
 });
 
 /**
- * Migration transparente de chrome.storage.local vers chrome.storage.sync
+ * Restaure immédiatement le badge depuis le stockage local au réveil du navigateur
  */
-async function migrateToSync() {
+async function restoreBadge() {
     try {
         const localData = await chrome.storage.local.get(null);
-        if (Object.keys(localData).length > 0) {
-            console.log("Migration des données locales vers sync...");
-            await chrome.storage.sync.set(localData);
-            await chrome.storage.local.clear();
-            console.log("Migration terminée avec succès.");
-        }
-    } catch (error) {
-        console.error("Erreur lors de la migration vers sync:", error);
+        await updateBadgeCount(localData);
+    } catch (e) {
+        // Ignorer
     }
 }
 
@@ -45,15 +39,26 @@ async function migrateToSync() {
  */
 function setupContextMenus() {
     chrome.contextMenus.removeAll(() => {
+        if (chrome.runtime.lastError) {
+            // Consomme l'erreur éventuelle de purge
+        }
         chrome.contextMenus.create({
             id: 'add-anime',
             title: 'Ajouter aux Animes',
             contexts: ['page']
+        }, () => {
+            if (chrome.runtime.lastError) {
+                // Ignore l'erreur silencieusement si déjà existant
+            }
         });
         chrome.contextMenus.create({
             id: 'add-scan',
             title: 'Ajouter aux Scans',
             contexts: ['page']
+        }, () => {
+            if (chrome.runtime.lastError) {
+                // Ignore l'erreur silencieusement si déjà existant
+            }
         });
     });
 }
@@ -113,12 +118,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  */
 async function setupAlarm() {
     try {
-        const { getAppSettings } = await import('./utils.js');
         const settings = await getAppSettings();
-        chrome.alarms.clear(CONSTANTS.ALARM_NAME, () => {
-            chrome.alarms.create(CONSTANTS.ALARM_NAME, { periodInMinutes: settings.checkInterval });
-            console.log(`Alarme configurée toutes les ${settings.checkInterval} minutes.`);
-        });
+        chrome.alarms.create(CONSTANTS.ALARM_NAME, { periodInMinutes: settings.checkInterval });
+        console.log(`Alarme configurée toutes les ${settings.checkInterval} minutes.`);
     } catch (e) {
         chrome.alarms.create(CONSTANTS.ALARM_NAME, { periodInMinutes: CONSTANTS.DEFAULT_INTERVAL_MINUTES });
     }
@@ -215,7 +217,7 @@ async function handleMarkAsRead(request, sender) {
     }
 
     try {
-        const data = await chrome.storage.sync.get(null);
+        const data = await chrome.storage.local.get(null);
         let matchedKey = null;
         let matchedItem = null;
 
@@ -244,10 +246,10 @@ async function handleMarkAsRead(request, sender) {
                 matchedItem.isNew = (numUser < numLatest);
             }
 
-            await chrome.storage.sync.set({ [matchedKey]: matchedItem });
+            await chrome.storage.local.set({ [matchedKey]: matchedItem });
             
             // Mise à jour centralisée du badge
-            const updatedData = await chrome.storage.sync.get(null);
+            const updatedData = await chrome.storage.local.get(null);
             await updateBadgeCount(updatedData);
         }
     } catch (error) {
@@ -257,7 +259,7 @@ async function handleMarkAsRead(request, sender) {
 
 // Nettoyage immédiat du storage lors de la suppression d'un favori Chrome
 chrome.bookmarks.onRemoved.addListener((id) => {
-    chrome.storage.sync.remove(id, () => {
-        console.log(`Favori ${id} supprimé du stockage sync.`);
+    chrome.storage.local.remove(id, () => {
+        console.log(`Favori ${id} supprimé du stockage local.`);
     });
 });

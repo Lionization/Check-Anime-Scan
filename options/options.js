@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Exportation
     exportBtn.addEventListener('click', async () => {
         try {
-            const allData = await chrome.storage.sync.get(null);
+            const allData = await chrome.storage.local.get(null);
             const settings = await getAppSettings();
 
             const exportPayload = {
@@ -169,14 +169,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Restauration des réglages et des données
                 if (json.data) {
-                    await chrome.storage.sync.set(json.data);
+                    await chrome.storage.local.set(json.data);
                 }
                 if (json.settings) {
                     await saveAppSettings(json.settings);
                 }
 
                 await loadSettings();
-                const refreshedData = await chrome.storage.sync.get(null);
+                const refreshedData = await chrome.storage.local.get(null);
                 await updateBadgeCount(refreshedData);
 
                 showToast('✅ Restauration réussie !');

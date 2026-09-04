@@ -10,7 +10,6 @@
     "alarms",
     "tabs",
     "declarativeNetRequest",
-    "declarativeNetRequestWithHostAccess",
     "offscreen",
     "notifications",
     "contextMenus"
@@ -32,7 +31,12 @@
     "type": "module"
   },
   "action": {
-    "default_popup": "popup/popup.html"
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/favicon16.png",
+      "48": "icons/favicon48.png",
+      "128": "icons/favicon128.png"
+    }
   },
   "options_ui": {
     "page": "options/options.html",

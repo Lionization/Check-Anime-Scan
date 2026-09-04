@@ -8,6 +8,23 @@
     const isWebtoons = currentUrl.includes('webtoons.com');
     const isMangago = currentUrl.includes('mangago.me');
     const isAnimeSama = currentUrl.includes('anime-sama');
+    const isTopFrame = window.self === window.top;
+
+    // 0. FILTRAGE STRICT DU CONTEXTE D'EXÉCUTION (Évite de tourner sur le reste du web)
+    if (isTopFrame) {
+        if (!isAnimeSama && !isWebtoons && !isMangago) {
+            return; // Fenêtre principale hors du périmètre : arrêt immédiat
+        }
+    } else {
+        // En sous-frame (iframe) : restreint exclusivement aux lecteurs embarqués par Anime-Sama
+        const hasAnimeSamaReferrer = typeof document.referrer === 'string' && document.referrer.includes('anime-sama');
+        const hasAnimeSamaAncestor = window.location.ancestorOrigins && Array.from(window.location.ancestorOrigins).some(origin => origin.includes('anime-sama'));
+        
+        if (!hasAnimeSamaReferrer && !hasAnimeSamaAncestor && !isAnimeSama) {
+            return; // Iframe tierce non liée à Anime-Sama : arrêt immédiat
+        }
+    }
+
     const isBackgroundScrape = new URL(currentUrl).searchParams.get('background_scrape') === 'true';
 
     // =========================================================================
@@ -21,13 +38,15 @@
     // 2. MODE NORMAL : Suivi de lecture utilisateur
     let markedAsRead = false;
 
-    if (isWebtoons || isMangago || isAnimeSama) {
+    if (isTopFrame && (isWebtoons || isMangago || isAnimeSama)) {
         initScrollTracker();
         initAnimeSamaMessageListener();
     }
 
-    // Le tracker vidéo doit s'exécuter dans tous les contextes (notamment les iframes de lecteurs tiers)
-    initVideoTracker();
+    // Le tracker vidéo ne s'exécute que dans le contexte Anime-Sama (page hôte ou iframes associées)
+    if (isAnimeSama || !isTopFrame) {
+        initVideoTracker();
+    }
 
     /**
      * Traite le scraping d'Anime-Sama lorsqu'il est chargé dans une iframe offscreen
@@ -61,11 +80,29 @@
         }
 
         // Renvoyer les données au document offscreen
-        chrome.runtime.sendMessage({
+        safeSendMessage({
             action: 'offscreenScrapedData',
             originalUrl: currentUrl,
             data: { text: epNum, image: coverImage }
         });
+    }
+
+    /**
+     * Envoie un message au Service Worker de façon sécurisée (évite Extension context invalidated)
+     */
+    function safeSendMessage(payload, callback) {
+        if (!chrome?.runtime?.id) return;
+        try {
+            chrome.runtime.sendMessage(payload, (response) => {
+                if (chrome.runtime.lastError) {
+                    // Erreur consommée silencieusement si contexte invalidé
+                    return;
+                }
+                if (callback) callback(response);
+            });
+        } catch (e) {
+            // Contexte invalidé lors d'un rechargement de l'extension
+        }
     }
 
     /**
@@ -89,7 +126,7 @@
      * Calcule la progression du scroll et envoie la notification de lecture
      */
     function checkScrollProgress() {
-        if (markedAsRead) return;
+        if (!chrome?.runtime?.id || markedAsRead) return;
 
         const scrollPosition = window.scrollY + window.innerHeight;
         const documentHeight = Math.max(
@@ -106,7 +143,7 @@
 
             if (result.isValid && result.chapterText && result.chapterText !== 'Lu') {
                 markedAsRead = true;
-                chrome.runtime.sendMessage({
+                safeSendMessage({
                     action: 'markAsRead',
                     url: currentUrl,
                     progressText: result.chapterText
@@ -245,6 +282,8 @@
             trackedVideos.add(video);
 
             const checkAndNotify = () => {
+                if (!chrome?.runtime?.id) return;
+
                 const videoSrc = video.currentSrc || video.src || currentUrl;
                 if (lastMarkedVideoSrc && lastMarkedVideoSrc === videoSrc) return;
 
@@ -253,7 +292,7 @@
 
                 if (isFinished) {
                     lastMarkedVideoSrc = videoSrc;
-                    chrome.runtime.sendMessage({ action: 'markAsReadVideo' });
+                    safeSendMessage({ action: 'markAsReadVideo' });
                 }
             };
 
@@ -266,6 +305,10 @@
 
         // Observer les vidéos insérées dynamiquement dans le DOM
         const observer = new MutationObserver((mutations) => {
+            if (!chrome?.runtime?.id) {
+                observer.disconnect();
+                return;
+            }
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -292,6 +335,10 @@
         // Vérification de secours périodique pendant les premières secondes
         let checkCount = 0;
         const backupInterval = setInterval(() => {
+            if (!chrome?.runtime?.id) {
+                clearInterval(backupInterval);
+                return;
+            }
             document.querySelectorAll('video').forEach(attachToVideo);
             if (++checkCount >= 10) clearInterval(backupInterval);
         }, 2000);

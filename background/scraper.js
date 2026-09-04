@@ -27,7 +27,7 @@ export async function checkBookmarksForUpdates() {
         findTargetBookmarkFolders(bookmarks, settings.targetFolders, targets);
         
         const updates = {};
-        const storedAll = await chrome.storage.sync.get(null);
+        const storedAll = await chrome.storage.local.get(null);
 
         // Traitement parallèle par lots de 5 requêtes simultanées
         await runWithConcurrency(targets, 5, async (bookmark) => {
@@ -101,22 +101,24 @@ export async function checkBookmarksForUpdates() {
             };
         });
 
-        // Sauvegarde de l'état synchronisé
-        await chrome.storage.sync.set(updates);
+        // Sauvegarde de l'état local
+        await chrome.storage.local.set(updates);
 
         // Mise à jour centralisée du badge
-        const currentData = await chrome.storage.sync.get(null);
+        const currentData = await chrome.storage.local.get(null);
         await updateBadgeCount(currentData);
 
         // Nettoyage des favoris supprimés
         const validIds = targets.map(b => b.id);
         const keysToRemove = Object.keys(currentData).filter(key => key !== CONSTANTS.SETTINGS_STORAGE_KEY && !validIds.includes(key));
         if (keysToRemove.length > 0) {
-            await chrome.storage.sync.remove(keysToRemove);
+            await chrome.storage.local.remove(keysToRemove);
         }
 
     } catch (error) {
         console.error("Erreur lors de la vérification des favoris:", error);
+    } finally {
+        await closeOffscreenDocument();
     }
 }
 
@@ -182,6 +184,19 @@ async function setupOffscreenDocument(path) {
     }
     
     await creatingOffscreenPromise;
+}
+
+/**
+ * Ferme le document invisible Offscreen pour libérer les ressources mémoires
+ */
+export async function closeOffscreenDocument() {
+    try {
+        if (chrome.offscreen && await chrome.offscreen.hasDocument()) {
+            await chrome.offscreen.closeDocument();
+        }
+    } catch (e) {
+        // Ignorer si déjà fermé ou indisponible
+    }
 }
 
 /**

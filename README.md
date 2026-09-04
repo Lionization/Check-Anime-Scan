@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/hero-banner.jpg" alt="Bannière Check Anime & Scans" width="100%" />
+  <img src="./assets/hero-banner.webp" alt="Bannière Check Anime & Scans" width="100%" />
 </p>
 
 ---

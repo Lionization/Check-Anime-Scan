@@ -162,7 +162,7 @@ export async function updateBadgeCount(data) {
  */
 export async function getAppSettings() {
     try {
-        const stored = await chrome.storage.sync.get(CONSTANTS.SETTINGS_STORAGE_KEY);
+        const stored = await chrome.storage.local.get(CONSTANTS.SETTINGS_STORAGE_KEY);
         const savedSettings = stored[CONSTANTS.SETTINGS_STORAGE_KEY] || {};
         
         return {
@@ -182,7 +182,7 @@ export async function getAppSettings() {
 }
 
 /**
- * Enregistre les paramètres de configuration de l'extension.
+ * Enregistre les paramètres de configuration de l'extension dans le stockage local.
  * @param {{ checkInterval?: number, notificationsEnabled?: boolean, targetFolders?: string[] }} settings 
  */
 export async function saveAppSettings(settings) {
@@ -195,7 +195,7 @@ export async function saveAppSettings(settings) {
             : current.targetFolders
     };
     
-    await chrome.storage.sync.set({ [CONSTANTS.SETTINGS_STORAGE_KEY]: updated });
+    await chrome.storage.local.set({ [CONSTANTS.SETTINGS_STORAGE_KEY]: updated });
     return updated;
 }
 
