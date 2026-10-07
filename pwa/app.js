@@ -1,12 +1,13 @@
 /**
  * @fileoverview Contrôleur principal pour la PWA mobile Check Anime & Scans.
- * Communication directe avec l'API GitHub Gist sans serveur tiers.
+ * Communication directe avec l'API GitHub Gist, pull-to-refresh et édition directe.
  */
 
 const STORAGE_KEYS = {
     GIST_ID: 'check_scans_gist_id',
     GIST_TOKEN: 'check_scans_gist_token',
-    CACHED_DATA: 'check_scans_cached_data'
+    CACHED_DATA: 'check_scans_cached_data',
+    LAST_SYNC_TIME: 'check_scans_last_sync'
 };
 
 const GITHUB_API_URL = 'https://api.github.com/gists';
@@ -16,6 +17,7 @@ const GIST_FILENAME = 'suivi.json';
 let allItems = {};
 let activeFilter = 'all';
 let searchQuery = '';
+let isSyncing = false;
 
 // Enregistrement du Service Worker
 if ('serviceWorker' in navigator) {
@@ -38,6 +40,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeDialogBtn = document.getElementById('close-dialog-btn');
     const gistIdField = document.getElementById('gist-id-field');
     const gistTokenField = document.getElementById('gist-token-field');
+
+    // Éléments du dialogue de modification de chapitre
+    const chapterDialog = document.getElementById('chapter-dialog');
+    const chapterForm = document.getElementById('chapter-form');
+    const closeChapterDialogBtn = document.getElementById('close-chapter-dialog-btn');
 
     // Récupération des réglages existants
     const storedGistId = localStorage.getItem(STORAGE_KEYS.GIST_ID) || '';
@@ -96,6 +103,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Gestion du dialogue d'édition manuelle de chapitre
+    if (closeChapterDialogBtn) {
+        closeChapterDialogBtn.addEventListener('click', () => {
+            chapterDialog.close();
+        });
+    }
+
+    if (chapterForm) {
+        chapterForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const targetKey = document.getElementById('chapter-target-key').value;
+            const newNum = document.getElementById('chapter-number-input').value.trim();
+
+            if (targetKey && newNum && allItems[targetKey]) {
+                const item = allItems[targetKey];
+                const isAnime = (item.category || '').toUpperCase() === 'ANIMES' || (item.userProgress || '').toLowerCase().includes('épisode');
+                const newProgress = isAnime ? `Épisode ${newNum}` : `Chapitre ${newNum}`;
+                chapterDialog.close();
+                markAsRead(targetKey, newProgress);
+            }
+        });
+    }
+
     // Chargement initial (cache d'abord, puis réseau)
     loadInitialData();
 
@@ -116,18 +146,99 @@ document.addEventListener('DOMContentLoaded', () => {
             loadDataFromGist(false);
         }
     }, 180000);
+
+    // Initialisation du geste Pull-to-Refresh
+    initPullToRefresh();
 });
+
+/**
+ * Configure le geste tactile Pull to Refresh sur mobile
+ */
+function initPullToRefresh() {
+    const ptrIndicator = document.getElementById('ptr-indicator');
+    if (!ptrIndicator) return;
+
+    let touchStartY = 0;
+    let touchDiffY = 0;
+    let isTracking = false;
+
+    window.addEventListener('touchstart', (e) => {
+        if (window.scrollY === 0 && e.touches.length === 1) {
+            touchStartY = e.touches[0].clientY;
+            isTracking = true;
+        } else {
+            isTracking = false;
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!isTracking || window.scrollY > 0 || isSyncing) return;
+        const currentY = e.touches[0].clientY;
+        touchDiffY = currentY - touchStartY;
+
+        if (touchDiffY > 40) {
+            ptrIndicator.classList.add('visible');
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+        if (!isTracking) return;
+        if (touchDiffY > 75 && !isSyncing) {
+            if (navigator.vibrate) navigator.vibrate(20);
+            loadDataFromGist(true).finally(() => {
+                ptrIndicator.classList.remove('visible');
+            });
+        } else {
+            ptrIndicator.classList.remove('visible');
+        }
+        isTracking = false;
+        touchDiffY = 0;
+    }, { passive: true });
+}
+
+/**
+ * Met à jour l'indicateur visuel d'état de synchronisation dans l'en-tête
+ * @param {'syncing'|'synced'|'error'} state 
+ * @param {string} text 
+ */
+function setSyncStatus(state, text) {
+    const dot = document.querySelector('.sync-dot');
+    const label = document.getElementById('sync-label');
+    if (!dot || !label) return;
+
+    dot.className = 'sync-dot';
+    if (state === 'syncing') dot.classList.add('syncing');
+    if (state === 'error') dot.classList.add('error');
+
+    label.textContent = text;
+}
+
+/**
+ * Formate un timestamp relatif concis pour le statut
+ * @param {number} timestamp 
+ * @returns {string}
+ */
+function formatRelativeSyncTime(timestamp) {
+    if (!timestamp) return 'Synchronisé';
+    const elapsedMinutes = Math.floor((Date.now() - timestamp) / 60000);
+    if (elapsedMinutes < 1) return 'À l’instant';
+    if (elapsedMinutes < 60) return `Il y a ${elapsedMinutes}m`;
+    return 'Synchronisé';
+}
 
 /**
  * Charge les données initiales : affichage immédiat depuis le cache puis rafraîchissement réseau
  */
 async function loadInitialData() {
     const cached = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
+    const lastSync = parseInt(localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME) || '0', 10);
+
     if (cached) {
         try {
             allItems = JSON.parse(cached);
             setViewState('ready');
             renderItems();
+            setSyncStatus('synced', formatRelativeSyncTime(lastSync));
         } catch {
             // Ignorer
         }
@@ -158,6 +269,8 @@ async function loadDataFromGist(showLoading = false) {
     }
 
     if (showLoading) setViewState('loading');
+    setSyncStatus('syncing', 'Synchronisation...');
+    isSyncing = true;
 
     try {
         const response = await fetch(`${GITHUB_API_URL}/${gistId}`, {
@@ -180,22 +293,26 @@ async function loadDataFromGist(showLoading = false) {
             const parsed = JSON.parse(fileObj.content);
             allItems = parsed.items || parsed.mangas || parsed || {};
             localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
-            showToast('Lectures synchronisées !');
+            localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
+            setSyncStatus('synced', 'À l’instant');
         } else {
             allItems = {};
+            setSyncStatus('synced', 'Synchronisé');
         }
 
         setViewState('ready');
         renderItems();
     } catch (error) {
         console.error('Erreur Gist fetch:', error);
-        showToast('Erreur de connexion au Gist', true);
+        setSyncStatus('error', 'Erreur réseau');
         if (Object.keys(allItems).length > 0) {
             setViewState('ready');
             renderItems();
         } else {
             setViewState('unconfigured');
         }
+    } finally {
+        isSyncing = false;
     }
 }
 
@@ -297,7 +414,15 @@ function renderItems() {
                     <div class="progress-info">
                         <div class="progress-row">
                             <span class="progress-label">Dernier lu :</span>
-                            <span class="progress-val">${item.userProgress || 'Non commencé'}</span>
+                            <div class="progress-val-wrapper">
+                                <span class="progress-val">${item.userProgress || 'Non commencé'}</span>
+                                <button type="button" class="btn-edit-progress" data-action="edit" data-key="${encodeURIComponent(urlKey)}" title="Modifier manuellement">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                         <div class="progress-row">
                             <span class="progress-label">Dernier sorti :</span>
@@ -337,8 +462,37 @@ function renderItems() {
             });
         }
 
+        const editBtn = card.querySelector('[data-action="edit"]');
+        if (editBtn) {
+            editBtn.addEventListener('click', () => {
+                openChapterEditModal(urlKey, item);
+            });
+        }
+
         gridEl.appendChild(card);
     });
+}
+
+/**
+ * Ouvre le dialogue modal pour modifier manuellement le numéro de chapitre
+ * @param {string} urlKey 
+ * @param {any} item 
+ */
+function openChapterEditModal(urlKey, item) {
+    const dialog = document.getElementById('chapter-dialog');
+    const titleEl = document.getElementById('chapter-dialog-title');
+    const targetKeyInput = document.getElementById('chapter-target-key');
+    const numberInput = document.getElementById('chapter-number-input');
+
+    if (!dialog) return;
+
+    titleEl.textContent = `Modifier : ${item.title || 'Manga'}`;
+    targetKeyInput.value = urlKey;
+    const currentNum = extractEpisodeNumber(item.userProgress);
+    numberInput.value = currentNum > 0 ? currentNum : '';
+
+    dialog.showModal();
+    numberInput.focus();
 }
 
 /**
@@ -389,6 +543,8 @@ async function saveItemsToGist() {
 
     if (!gistId || !gistToken) return;
 
+    setSyncStatus('syncing', 'Sauvegarde...');
+
     try {
         const payload = {
             version: 1,
@@ -415,12 +571,16 @@ async function saveItemsToGist() {
 
         if (!response.ok) {
             console.error('Erreur PATCH Gist:', response.status);
+            setSyncStatus('error', 'Erreur sauvegarde');
             showToast('Erreur de synchronisation réseau', true);
         } else {
+            localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
+            setSyncStatus('synced', 'À l’instant');
             showToast('Synchronisé avec GitHub Gist');
         }
     } catch (err) {
         console.error('Erreur lors de la sauvegarde Gist:', err);
+        setSyncStatus('error', 'Erreur réseau');
         showToast('Erreur réseau lors de la sauvegarde', true);
     }
 }

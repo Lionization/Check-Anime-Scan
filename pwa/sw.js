@@ -1,9 +1,11 @@
 /**
  * @fileoverview Service Worker pour la PWA Check Anime & Scans Mobile.
- * Gère la mise en cache de l'interface applicative et le mode hors-ligne.
+ * Stratégie Network-First avec repli cache hors-ligne et versioning horodaté.
  */
 
-const CACHE_NAME = 'check-scans-pwa-v1';
+// Horodatage automatique de la version du cache (AnnéeMoisJour_HeureMinute)
+const CACHE_NAME = 'check-scans-20261007_2120';
+
 const APP_SHELL = [
     './',
     './index.html',
@@ -36,22 +38,32 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // Ne pas mettre en cache les requêtes API GitHub en cache statique
+    // Ne jamais intercepter les requêtes directes à l'API GitHub
     if (url.hostname.includes('api.github.com')) {
         return;
     }
 
+    // Stratégie Network-First : réseau en priorité, mise en cache automatique, repli hors-ligne
     event.respondWith(
-        caches.match(event.request).then((cachedResponse) => {
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-            return fetch(event.request).catch(() => {
-                // Secours hors-ligne
-                if (event.request.mode === 'navigate') {
-                    return caches.match('./index.html');
+        fetch(event.request)
+            .then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                    const responseToCache = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseToCache);
+                    });
                 }
-            });
-        })
+                return networkResponse;
+            })
+            .catch(() => {
+                return caches.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) {
+                        return cachedResponse;
+                    }
+                    if (event.request.mode === 'navigate') {
+                        return caches.match('./index.html');
+                    }
+                });
+            })
     );
 });

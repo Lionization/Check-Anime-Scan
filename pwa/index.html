@@ -13,10 +13,22 @@
 </head>
 <body>
     <div class="app-layout">
+        <!-- Indicateur Pull to Refresh -->
+        <div id="ptr-indicator" class="ptr-indicator" aria-hidden="true">
+            <div class="ptr-spinner"></div>
+            <span class="ptr-text">Glissez pour actualiser</span>
+        </div>
+
         <header class="app-header">
             <div class="brand">
                 <img src="icons/favicon48.png" alt="Logo" class="brand-icon" width="32" height="32">
-                <h1 class="brand-title">Check Scans</h1>
+                <div>
+                    <h1 class="brand-title">Check Scans</h1>
+                    <div id="sync-status" class="sync-status" title="Statut de synchronisation">
+                        <span class="sync-dot"></span>
+                        <span id="sync-label" class="sync-label">Synchronisé</span>
+                    </div>
+                </div>
             </div>
             <div class="header-actions">
                 <button type="button" id="refresh-btn" class="icon-btn" aria-label="Actualiser les lectures" title="Actualiser">
@@ -86,6 +98,27 @@
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="btn btn-primary">Enregistrer & Charger</button>
+                </div>
+            </form>
+        </dialog>
+
+        <!-- Dialogue Modal de Modification Manuelle de Chapitre -->
+        <dialog id="chapter-dialog" class="modal-dialog">
+            <form method="dialog" id="chapter-form" class="modal-form">
+                <div class="modal-header">
+                    <h2 id="chapter-dialog-title">Modifier le chapitre lu</h2>
+                    <button type="button" id="close-chapter-dialog-btn" class="icon-btn-close" aria-label="Fermer">✕</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="chapter-target-key">
+                    <div class="form-field">
+                        <label for="chapter-number-input">Numéro du chapitre ou épisode lu :</label>
+                        <input type="number" id="chapter-number-input" class="form-input" min="0" step="any" required placeholder="ex: 115">
+                        <span class="field-note">Entrez le dernier numéro lu pour ajuster votre progression.</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Valider la progression</button>
                 </div>
             </form>
         </dialog>

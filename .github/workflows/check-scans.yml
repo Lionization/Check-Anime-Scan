@@ -1,0 +1,29 @@
+name: Vérification Périodique des Sorties (Scraper Cloud)
+
+on:
+  schedule:
+    # Exécution automatique toutes les 6 heures
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # Déclenchement manuel depuis l'interface GitHub Actions
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Vérification des sorties et mise à jour du Gist
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          node scripts/cloud-scraper.mjs
