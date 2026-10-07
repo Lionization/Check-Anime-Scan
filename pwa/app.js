@@ -21,15 +21,21 @@ let searchQuery = '';
 let isSyncing = false;
 let currentPushSubscription = null;
 
-// Enregistrement du Service Worker
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').then((reg) => {
-            initPushNotificationUI(reg);
-        }).catch((err) => {
-            console.log('Erreur SW:', err);
-        });
+// Enregistrement et mise à jour du Service Worker
+function registerAppServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+        reg.update();
+        refreshPushStatusUI(reg);
+    }).catch((err) => {
+        console.warn('Erreur SW:', err);
     });
+}
+
+if (document.readyState === 'complete') {
+    registerAppServiceWorker();
+} else {
+    window.addEventListener('load', registerAppServiceWorker);
 }
 
 // Initialisation au chargement du DOM
@@ -64,8 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedGistId) gistIdField.value = storedGistId;
     if (storedGistToken) gistTokenField.value = storedGistToken;
 
-    // Écouteurs de navigation et filtres
+    // Initialisation forcée de l'onglet 'unread' par défaut
+    activeFilter = 'unread';
     filterTabs.forEach((tab) => {
+        const isUnread = tab.getAttribute('data-filter') === 'unread';
+        tab.classList.toggle('active', isUnread);
+
         tab.addEventListener('click', () => {
             filterTabs.forEach((t) => t.classList.remove('active'));
             tab.classList.add('active');
@@ -87,11 +97,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Gestion du dialogue de réglages
     openSettingsBtn.addEventListener('click', () => {
+        refreshPushStatusUI();
         settingsDialog.showModal();
     });
 
     if (setupBtn) {
         setupBtn.addEventListener('click', () => {
+            refreshPushStatusUI();
             settingsDialog.showModal();
         });
     }
@@ -140,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialisation Push dès que le Service Worker est prêt
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((reg) => {
-            initPushNotificationUI(reg);
+            refreshPushStatusUI(reg);
         });
     }
 
@@ -398,6 +410,12 @@ function updateAppBadge() {
         } else {
             navigator.clearAppBadge().catch(() => {});
         }
+    }
+
+    // Mise à jour visuelle du libellé de l'onglet À lire avec compteur
+    const unreadTab = document.querySelector('.tab-btn[data-filter="unread"]');
+    if (unreadTab) {
+        unreadTab.textContent = unreadCount > 0 ? `À lire (${unreadCount})` : 'À lire';
     }
 }
 
@@ -684,30 +702,38 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 /**
- * Initialise l'interface des notifications push
- * @param {ServiceWorkerRegistration} reg 
+ * Vérifie et actualise l'état des notifications dans la modale
+ * @param {ServiceWorkerRegistration|null} [regInstance]
  */
-async function initPushNotificationUI(reg) {
+async function refreshPushStatusUI(regInstance = null) {
     const btn = document.getElementById('toggle-push-btn');
     const label = document.getElementById('push-status-label');
+    if (!btn || !label) return;
 
-    if (!('PushManager' in window)) {
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Non disponible dans cet onglet';
-        }
-        if (label) {
-            label.textContent = 'Sur iPhone : installez l’application sur votre écran d’accueil (Partager > Sur l’écran d’accueil) puis ouvrez-la depuis son icône pour débloquer les notifications.';
-        }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        btn.disabled = true;
+        btn.textContent = 'Non disponible';
+        label.textContent = 'Notifications non supportées par ce navigateur (sur iPhone : installez l’application sur votre écran d’accueil).';
+        label.style.color = '#ef4444';
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        btn.disabled = true;
+        btn.textContent = 'Notifications bloquées';
+        label.textContent = 'Bloqué par Chrome : appuyez sur l’icône cadenas/réglages à gauche de l’URL > Autorisations > Notifications > Autoriser.';
+        label.style.color = '#f59e0b';
         return;
     }
 
     try {
+        const reg = regInstance || await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
         currentPushSubscription = sub;
         updatePushUI(!!sub);
     } catch (err) {
-        console.error('Erreur vérification push:', err);
+        console.warn('Erreur vérification abonnement push:', err);
+        updatePushUI(false);
     }
 }
 
@@ -721,60 +747,134 @@ function updatePushUI(isSubscribed) {
     if (!btn || !label) return;
 
     if (isSubscribed) {
+        btn.disabled = false;
         btn.textContent = 'Désactiver les notifications';
         btn.className = 'btn btn-outline';
-        label.textContent = 'Notifications actives sur cet appareil.';
+        label.textContent = 'Notifications actives sur ce téléphone !';
+        label.style.color = 'var(--accent-green)';
     } else {
-        btn.textContent = 'Activer les notifications directes';
         btn.className = 'btn btn-secondary';
-        label.textContent = 'Recevez une alerte sur votre téléphone dès qu’un scan sort.';
+        if (window.Notification && Notification.permission === 'denied') {
+            btn.disabled = true;
+            btn.textContent = 'Notifications bloquées';
+            label.textContent = 'Bloqué par Chrome : appuyez sur le cadenas à gauche de l’adresse web > Notifications > Autoriser.';
+            label.style.color = '#f59e0b';
+        } else if (window.Notification && Notification.permission === 'granted') {
+            btn.disabled = false;
+            btn.textContent = 'Activer les notifications directes';
+            label.textContent = 'Autorisation système accordée. Cliquez pour lier cet appareil au suivi cloud.';
+            label.style.color = 'var(--text-secondary)';
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Activer les notifications directes';
+            label.textContent = 'Recevez une alerte sur votre téléphone dès qu’un scan sort.';
+            label.style.color = 'var(--text-secondary)';
+        }
     }
 }
 
 /**
- * Active ou désactive l'abonnement Web Push
+ * Active ou désactive l'abonnement Web Push avec feedback visuel direct
  */
 async function handleTogglePushSubscription() {
     const btn = document.getElementById('toggle-push-btn');
-    if (!btn || !('serviceWorker' in navigator)) return;
+    const label = document.getElementById('push-status-label');
+    if (!btn) return;
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        if (label) {
+            label.textContent = 'Notifications non supportées par ce navigateur.';
+            label.style.color = '#ef4444';
+        }
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        btn.disabled = true;
+        btn.textContent = 'Notifications bloquées';
+        if (label) {
+            label.textContent = 'Notifications bloquées dans Chrome : cliquez sur le cadenas à gauche de l’adresse > Notifications > Autoriser.';
+            label.style.color = '#f59e0b';
+        }
+        return;
+    }
 
     btn.disabled = true;
 
     try {
-        const reg = await navigator.serviceWorker.ready;
-
         if (currentPushSubscription) {
             // Désabonnement
+            btn.textContent = 'Désactivation...';
+            if (label) label.textContent = 'Suppression de l’abonnement en cours...';
             await currentPushSubscription.unsubscribe();
             currentPushSubscription = null;
             await saveSubscriptionToGist(null);
             updatePushUI(false);
             showToast('Notifications désactivées.');
         } else {
-            // Demande d'autorisation
+            // Demande d'autorisation directe (geste utilisateur synchrone)
+            btn.textContent = 'Demande en cours...';
+            if (label) {
+                label.textContent = 'Veuillez accepter la demande de notification...';
+                label.style.color = 'var(--text-secondary)';
+            }
+
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
+                btn.disabled = true;
+                btn.textContent = 'Notifications refusées';
+                if (label) {
+                    label.textContent = 'Autorisation non accordée. Si aucune invite n’est apparue, vérifiez les paramètres du site dans Chrome.';
+                    label.style.color = '#f59e0b';
+                }
                 showToast('Autorisation refusée par le navigateur.', true);
-                btn.disabled = false;
                 return;
             }
 
-            // Inscription PushManager
+            // Inscription PushManager auprès de Google FCM
+            btn.textContent = 'Connexion Push...';
+            if (label) label.textContent = 'Génération de l’identifiant d’envoi Push auprès de Google...';
+
+            const reg = await navigator.serviceWorker.ready;
             const sub = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
             });
 
-            currentPushSubscription = sub;
+            // Sauvegarde dans le Gist secret
+            btn.textContent = 'Sauvegarde cloud...';
+            if (label) label.textContent = 'Enregistrement de l’appareil sur votre Gist secret...';
+
             await saveSubscriptionToGist(sub.toJSON());
+
+            currentPushSubscription = sub;
             updatePushUI(true);
             showToast('Notifications activées sur ce téléphone !');
+
+            // Déclenchement d'une notification locale immédiate pour confirmation matérielle
+            try {
+                await reg.showNotification('Check Anime & Scans', {
+                    body: 'Notifications directes activées avec succès sur ce smartphone !',
+                    icon: './icons/favicon128.png',
+                    badge: './icons/favicon48.png'
+                });
+            } catch { }
         }
     } catch (err) {
         console.error('Erreur bascule notification:', err);
-        showToast('Erreur activation notification.', true);
+        if (label) {
+            label.textContent = `Erreur : ${err.message || 'Échec de connexion'}`;
+            label.style.color = '#ef4444';
+        }
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Réessayer l’activation';
+        }
+        showToast('Erreur : ' + (err.message || 'Échec activation'), true);
     } finally {
-        btn.disabled = false;
+        if (currentPushSubscription) {
+            btn.disabled = false;
+        }
     }
 }
 
@@ -783,35 +883,46 @@ async function handleTogglePushSubscription() {
  * @param {PushSubscriptionJSON|null} subJson 
  */
 async function saveSubscriptionToGist(subJson) {
-    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
-    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN);
-    if (!gistId || !gistToken) return;
+    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID) || document.getElementById('gist-id-field')?.value.trim();
+    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN) || document.getElementById('gist-token-field')?.value.trim();
 
-    try {
-        const payload = {
-            version: 1,
-            updatedAt: Date.now(),
-            _pushSubscription: subJson,
-            items: allItems
-        };
+    if (!gistId || !gistToken) {
+        throw new Error('Identifiants Gist absents. Veuillez enregistrer votre ID Gist et Token dans les réglages.');
+    }
 
-        await fetch(`${GITHUB_API_URL}/${gistId}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${gistToken}`,
-                'Accept': 'application/vnd.github+json',
-                'Content-Type': 'application/json',
-                'X-GitHub-Api-Version': '2022-11-28'
-            },
-            body: JSON.stringify({
-                files: {
-                    [GIST_FILENAME]: {
-                        content: JSON.stringify(payload, null, 2)
-                    }
+    let itemsToSave = allItems;
+    if (!itemsToSave || Object.keys(itemsToSave).length === 0) {
+        try {
+            const rawCache = localStorage.getItem(STORAGE_KEYS.CACHE_ITEMS);
+            if (rawCache) itemsToSave = JSON.parse(rawCache);
+        } catch { }
+    }
+
+    const payload = {
+        version: 1,
+        updatedAt: Date.now(),
+        _pushSubscription: subJson,
+        items: itemsToSave || {}
+    };
+
+    const res = await fetch(`${GITHUB_API_URL}/${gistId}`, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${gistToken}`,
+            'Accept': 'application/vnd.github+json',
+            'Content-Type': 'application/json',
+            'X-GitHub-Api-Version': '2022-11-28'
+        },
+        body: JSON.stringify({
+            files: {
+                [GIST_FILENAME]: {
+                    content: JSON.stringify(payload, null, 2)
                 }
-            })
-        });
-    } catch (err) {
-        console.error('Erreur sauvegarde push Gist:', err);
+            }
+        })
+    });
+
+    if (!res.ok) {
+        throw new Error(`Échec GitHub API (${res.status}) : vérifiez la validité de votre Token.`);
     }
 }
