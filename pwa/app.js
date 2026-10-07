@@ -97,15 +97,21 @@ document.addEventListener('DOMContentLoaded', () => {
         loadDataFromGist(true);
     });
 
+    const populateSettingsFields = () => {
+        gistIdField.value = localStorage.getItem(STORAGE_KEYS.GIST_ID) || '';
+        gistTokenField.value = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN) || '';
+        refreshPushStatusUI();
+    };
+
     // Gestion du dialogue de réglages
     openSettingsBtn.addEventListener('click', () => {
-        refreshPushStatusUI();
+        populateSettingsFields();
         settingsDialog.showModal();
     });
 
     if (setupBtn) {
         setupBtn.addEventListener('click', () => {
-            refreshPushStatusUI();
+            populateSettingsFields();
             settingsDialog.showModal();
         });
     }
@@ -1114,8 +1120,10 @@ async function handleTogglePushSubscription() {
  * @param {PushSubscriptionJSON|null} subJson 
  */
 async function saveSubscriptionToGist(subJson) {
-    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID) || document.getElementById('gist-id-field')?.value.trim();
-    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN) || document.getElementById('gist-token-field')?.value.trim();
+    const rawGistId = localStorage.getItem(STORAGE_KEYS.GIST_ID) || document.getElementById('gist-id-field')?.value.trim();
+    const gistId = extractGistId(rawGistId);
+    const rawToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN) || document.getElementById('gist-token-field')?.value.trim();
+    const gistToken = (rawToken || '').trim();
 
     if (!gistId || !gistToken) {
         throw new Error('Identifiants Gist absents. Veuillez enregistrer votre ID Gist et Token dans les réglages.');
@@ -1124,7 +1132,7 @@ async function saveSubscriptionToGist(subJson) {
     let itemsToSave = allItems;
     if (!itemsToSave || Object.keys(itemsToSave).length === 0) {
         try {
-            const rawCache = localStorage.getItem(STORAGE_KEYS.CACHE_ITEMS);
+            const rawCache = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
             if (rawCache) itemsToSave = JSON.parse(rawCache);
         } catch { }
     }
