@@ -573,13 +573,13 @@ function renderItems() {
         const safeTitle = escapeHtml(item.title || 'Sans titre');
         const safeUserProgress = escapeHtml(item.userProgress || 'Non commencé');
         const safeLatestState = escapeHtml(item.latestState || 'Inconnu');
-        // Calcul du lien d'ouverture : sur Android, utilisation d'un Intent explicite pour forcer le vrai Google Chrome
+        // Calcul du lien d'ouverture : ciblage direct de l'activité principale Chrome (Main) avec nouvelle tâche
         const isAndroid = /Android/i.test(navigator.userAgent);
         let openHref = safeUrl;
         if (isAndroid && safeUrl.startsWith('http')) {
             const scheme = safeUrl.startsWith('https://') ? 'https' : 'http';
             const strippedUrl = safeUrl.replace(/^https?:\/\//i, '');
-            openHref = `intent://${strippedUrl}#Intent;scheme=${scheme};package=com.android.chrome;end`;
+            openHref = `intent://${strippedUrl}#Intent;scheme=${scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;component=com.android.chrome/com.google.android.apps.chrome.Main;launchFlags=0x10000000;end`;
         }
 
         card.innerHTML = `
