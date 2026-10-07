@@ -390,7 +390,26 @@ async function loadDataFromGist(showLoading = false) {
         renderItems();
     } catch (error) {
         console.error('Erreur Gist fetch:', error);
-        setSyncStatus('error', 'Erreur réseau');
+        let errorLabel = 'Erreur réseau';
+        const msg = error.message || '';
+
+        if (msg.includes('401')) {
+            errorLabel = 'Token expiré (401)';
+            showToast('Votre Token GitHub PAT a expiré ou est invalide. Vérifiez vos réglages.', true);
+        } else if (msg.includes('403')) {
+            errorLabel = 'Quota atteint (403)';
+            showToast('Limite de requêtes GitHub atteinte temporairement.', true);
+        } else if (msg.includes('404')) {
+            errorLabel = 'Gist introuvable (404)';
+            showToast('L’identifiant du Gist secret est introuvable.', true);
+        } else if (!navigator.onLine) {
+            errorLabel = 'Hors-ligne';
+            showToast('Aucune connexion Internet détectée.', false);
+        } else {
+            showToast(`Erreur réseau (${msg || 'connexion interrompue'})`, true);
+        }
+
+        setSyncStatus('error', errorLabel);
         if (Object.keys(allItems).length > 0) {
             setViewState('ready');
             renderItems();
