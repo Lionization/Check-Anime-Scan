@@ -4,13 +4,13 @@
  */
 
 // Horodatage automatique de la version du cache (AnnéeMoisJour_HeureMinute)
-const CACHE_NAME = 'check-scans-20261007_2337';
+const CACHE_NAME = 'check-scans-20261007_2340';
 
 const APP_SHELL = [
     './',
     './index.html',
-    './app.css',
-    './app.js',
+    './app.css?v=20261007_2340',
+    './app.js?v=20261007_2340',
     './manifest.json',
     './icons/favicon16.png',
     './icons/favicon48.png',
@@ -21,7 +21,14 @@ const APP_SHELL = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(APP_SHELL);
+            return Promise.all(
+                APP_SHELL.map((url) => {
+                    return fetch(url, { cache: 'reload' }).then((res) => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status} pour ${url}`);
+                        return cache.put(url, res);
+                    });
+                })
+            );
         }).then(() => self.skipWaiting())
     );
 });

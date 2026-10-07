@@ -23,6 +23,16 @@ let searchQuery = '';
 let isSyncing = false;
 let currentPushSubscription = null;
 
+let isRefreshing = false;
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!isRefreshing) {
+            isRefreshing = true;
+            window.location.reload();
+        }
+    });
+}
+
 // Enregistrement et mise à jour du Service Worker
 function registerAppServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
