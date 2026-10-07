@@ -573,7 +573,14 @@ function renderItems() {
         const safeTitle = escapeHtml(item.title || 'Sans titre');
         const safeUserProgress = escapeHtml(item.userProgress || 'Non commencé');
         const safeLatestState = escapeHtml(item.latestState || 'Inconnu');
-        const safeUrl = sanitizeUrl(item.url);
+        // Calcul du lien d'ouverture : sur Android, utilisation d'un Intent explicite pour forcer le vrai Google Chrome
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        let openHref = safeUrl;
+        if (isAndroid && safeUrl.startsWith('http')) {
+            const scheme = safeUrl.startsWith('https://') ? 'https' : 'http';
+            const strippedUrl = safeUrl.replace(/^https?:\/\//i, '');
+            openHref = `intent://${strippedUrl}#Intent;scheme=${scheme};package=com.android.chrome;end`;
+        }
 
         card.innerHTML = `
             ${coverEl}
@@ -615,7 +622,7 @@ function renderItems() {
                     <button type="button" class="action-btn btn-plus-one" data-action="plusone" data-key="${encodeURIComponent(urlKey)}" title="Incrémenter d'un chapitre">
                         +1
                     </button>
-                    <a href="${safeUrl}" target="_blank" rel="noopener" class="action-btn btn-open-link" title="Ouvrir le lien">
+                    <a href="${openHref}" target="_blank" rel="noopener noreferrer" class="action-btn btn-open-link" title="Ouvrir dans Chrome">
                         Ouvrir
                     </a>
                 </div>
@@ -644,50 +651,8 @@ function renderItems() {
             });
         }
 
-        const openBtn = card.querySelector('.btn-open-link');
-        if (openBtn) {
-            openBtn.addEventListener('click', (e) => {
-                if (item.url && item.url.startsWith('http')) {
-                    e.preventDefault();
-                    openInExternalBrowser(item.url);
-                }
-            });
-        }
-
         gridEl.appendChild(card);
     });
-}
-
-/**
- * Ouvre une URL directement dans le navigateur principal externe du système (Chrome)
- * en contournant le conteneur interne Custom Tab de la PWA sur Android.
- * @param {string} url 
- */
-function openInExternalBrowser(url) {
-    if (!url || !url.startsWith('http')) return;
-
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    if (isAndroid) {
-        const scheme = url.startsWith('https://') ? 'https' : 'http';
-        const strippedUrl = url.replace(/^https?:\/\//i, '');
-        // Schéma Intent Android standard pour forcer le lancement de l'application Chrome autonome
-        const intentUrl = `intent://${strippedUrl}#Intent;scheme=${scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=com.android.chrome;end`;
-
-        const fallbackTimer = setTimeout(() => {
-            window.open(url, '_blank', 'noopener,noreferrer');
-        }, 500);
-
-        try {
-            window.location.href = intentUrl;
-            setTimeout(() => clearTimeout(fallbackTimer), 1200);
-            return;
-        } catch {
-            clearTimeout(fallbackTimer);
-        }
-    }
-
-    // Repli pour iOS et ordinateurs
-    window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 /**
