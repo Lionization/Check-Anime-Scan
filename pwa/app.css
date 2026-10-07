@@ -95,6 +95,20 @@ body {
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.brand-version {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    letter-spacing: 0.02em;
 }
 
 .sync-status {

@@ -9,7 +9,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/favicon48.png">
     <link rel="apple-touch-icon" href="icons/favicon128.png">
-    <link rel="stylesheet" href="app.css?v=20261007_2340">
+    <link rel="stylesheet" href="app.css">
 </head>
 <body>
     <div class="app-layout">
@@ -23,7 +23,7 @@
             <div class="brand">
                 <img src="icons/favicon48.png" alt="Logo" class="brand-icon" width="32" height="32">
                 <div>
-                    <h1 class="brand-title">Check Scans</h1>
+                    <h1 class="brand-title">Check Scans <span id="app-version-badge" class="brand-version"></span></h1>
                     <div id="sync-status" class="sync-status" title="Statut de synchronisation">
                         <span class="sync-dot"></span>
                         <span id="sync-label" class="sync-label">Synchronisé</span>
@@ -140,6 +140,7 @@
         <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     </div>
 
-    <script type="module" src="app.js?v=20261007_2340"></script>
+    <script src="version.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

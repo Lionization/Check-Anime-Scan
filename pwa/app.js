@@ -15,6 +15,7 @@ const STORAGE_KEYS = {
 const GITHUB_API_URL = 'https://api.github.com/gists';
 const GIST_FILENAME = 'suivi.json';
 const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8upQXLnus7cFx1pGJV7HXddnw4y_wtgvVHMg';
+const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION) || '1.4.1';
 
 // État de l'application
 let allItems = {};
@@ -52,6 +53,12 @@ if (document.readyState === 'complete') {
 
 // Initialisation au chargement du DOM
 document.addEventListener('DOMContentLoaded', () => {
+    // Affichage dynamique de la version
+    const versionBadge = document.getElementById('app-version-badge');
+    if (versionBadge) {
+        versionBadge.textContent = `v${CURRENT_VERSION}`;
+    }
+
     const refreshBtn = document.getElementById('refresh-btn');
     const openSettingsBtn = document.getElementById('open-settings-btn');
     const setupBtn = document.getElementById('setup-btn');

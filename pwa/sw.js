@@ -3,14 +3,17 @@
  * Stratégie Network-First avec repli cache hors-ligne et versioning horodaté.
  */
 
-// Horodatage automatique de la version du cache (AnnéeMoisJour_HeureMinute)
-const CACHE_NAME = 'check-scans-20261007_2340';
+// Source de vérité globale pour la version
+importScripts('./version.js');
+
+const CACHE_NAME = `check-scans-v${self.APP_VERSION || '1.0.0'}`;
 
 const APP_SHELL = [
     './',
     './index.html',
-    './app.css?v=20261007_2340',
-    './app.js?v=20261007_2340',
+    './app.css',
+    './app.js',
+    './version.js',
     './manifest.json',
     './icons/favicon16.png',
     './icons/favicon48.png',
