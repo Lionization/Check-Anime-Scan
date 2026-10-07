@@ -344,9 +344,33 @@ function extractEpisodeNumber(str) {
 }
 
 /**
+ * Met à jour le badge numérique natif sur l'icône de l'application (Badging API)
+ */
+function updateAppBadge() {
+    let unreadCount = 0;
+    for (const item of Object.values(allItems)) {
+        if (!item || typeof item !== 'object') continue;
+        const numUser = extractEpisodeNumber(item.userProgress);
+        const numLatest = extractEpisodeNumber(item.latestState);
+        if (numLatest > numUser || (!item.userProgress && item.latestState)) {
+            unreadCount++;
+        }
+    }
+
+    if ('setAppBadge' in navigator) {
+        if (unreadCount > 0) {
+            navigator.setAppBadge(unreadCount).catch(() => {});
+        } else {
+            navigator.clearAppBadge().catch(() => {});
+        }
+    }
+}
+
+/**
  * Effectue le rendu de la liste des cartes
  */
 function renderItems() {
+    updateAppBadge();
     const gridEl = document.getElementById('items-grid');
     const emptyEl = document.getElementById('empty-state');
     gridEl.innerHTML = '';
