@@ -158,7 +158,7 @@ export async function updateBadgeCount(data) {
 
 /**
  * Récupère les paramètres de configuration de l'extension avec valeurs par défaut.
- * @returns {Promise<{ checkInterval: number, notificationsEnabled: boolean, targetFolders: string[] }>}
+ * @returns {Promise<{ checkInterval: number, notificationsEnabled: boolean, targetFolders: string[], gistId: string, gistToken: string }>}
  */
 export async function getAppSettings() {
     try {
@@ -170,20 +170,24 @@ export async function getAppSettings() {
             notificationsEnabled: savedSettings.notificationsEnabled !== false, // Actif par défaut
             targetFolders: Array.isArray(savedSettings.targetFolders) && savedSettings.targetFolders.length > 0
                 ? savedSettings.targetFolders.map(f => f.toUpperCase().trim())
-                : [...CONSTANTS.DEFAULT_TARGET_FOLDERS]
+                : [...CONSTANTS.DEFAULT_TARGET_FOLDERS],
+            gistId: typeof savedSettings.gistId === 'string' ? savedSettings.gistId.trim() : '',
+            gistToken: typeof savedSettings.gistToken === 'string' ? savedSettings.gistToken.trim() : ''
         };
     } catch {
         return {
             checkInterval: CONSTANTS.DEFAULT_INTERVAL_MINUTES,
             notificationsEnabled: true,
-            targetFolders: [...CONSTANTS.DEFAULT_TARGET_FOLDERS]
+            targetFolders: [...CONSTANTS.DEFAULT_TARGET_FOLDERS],
+            gistId: '',
+            gistToken: ''
         };
     }
 }
 
 /**
  * Enregistre les paramètres de configuration de l'extension dans le stockage local.
- * @param {{ checkInterval?: number, notificationsEnabled?: boolean, targetFolders?: string[] }} settings 
+ * @param {{ checkInterval?: number, notificationsEnabled?: boolean, targetFolders?: string[], gistId?: string, gistToken?: string }} settings 
  */
 export async function saveAppSettings(settings) {
     const current = await getAppSettings();
@@ -192,7 +196,9 @@ export async function saveAppSettings(settings) {
         ...settings,
         targetFolders: settings.targetFolders
             ? settings.targetFolders.map(f => f.toUpperCase().trim()).filter(Boolean)
-            : current.targetFolders
+            : current.targetFolders,
+        gistId: settings.gistId !== undefined ? settings.gistId.trim() : current.gistId,
+        gistToken: settings.gistToken !== undefined ? settings.gistToken.trim() : current.gistToken
     };
     
     await chrome.storage.local.set({ [CONSTANTS.SETTINGS_STORAGE_KEY]: updated });

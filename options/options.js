@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const newFolderInput = document.getElementById('new-folder-input');
     const intervalSelect = document.getElementById('interval-select');
     const notificationsToggle = document.getElementById('notifications-toggle');
+    const gistIdInput = document.getElementById('gist-id-input');
+    const gistTokenInput = document.getElementById('gist-token-input');
+    const testGistBtn = document.getElementById('test-gist-btn');
     const saveBtn = document.getElementById('save-btn');
     const exportBtn = document.getElementById('export-btn');
     const importTriggerBtn = document.getElementById('import-trigger-btn');
@@ -36,6 +39,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // État des notifications
         notificationsToggle.checked = settings.notificationsEnabled;
         
+        // Identifiants Gist
+        if (gistIdInput) gistIdInput.value = settings.gistId || '';
+        if (gistTokenInput) gistTokenInput.value = settings.gistToken || '';
+
         // Rendu des tags de dossiers
         renderFolderTags();
     }
@@ -97,7 +104,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             const newSettings = {
                 checkInterval: parseInt(intervalSelect.value, 10),
                 notificationsEnabled: notificationsToggle.checked,
-                targetFolders: currentFolders
+                targetFolders: currentFolders,
+                gistId: gistIdInput ? gistIdInput.value.trim() : '',
+                gistToken: gistTokenInput ? gistTokenInput.value.trim() : ''
             };
 
             await saveAppSettings(newSettings);
@@ -105,17 +114,57 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Informer le background service worker pour réaligner l'alarme
             chrome.runtime.sendMessage({ action: 'reconfigureAlarm' });
 
+            // Déclencher une synchronisation Gist si configuré
+            if (newSettings.gistId && newSettings.gistToken) {
+                chrome.runtime.sendMessage({ action: 'syncGist' });
+            }
+
             // Forcer une vérification avec les nouveaux dossiers
             chrome.runtime.sendMessage({ action: 'forceCheck' });
 
-            showToast('✅ Paramètres enregistrés avec succès !');
+            showToast('Paramètres enregistrés avec succès !');
         } catch (error) {
             console.error("Erreur lors de l'enregistrement des paramètres:", error);
-            showToast('❌ Erreur lors de la sauvegarde.', 'error');
+            showToast('Erreur lors de la sauvegarde.', 'error');
         } finally {
             saveBtn.disabled = false;
         }
     });
+
+    // Bouton de test et synchronisation immédiate Gist
+    if (testGistBtn) {
+        testGistBtn.addEventListener('click', async () => {
+            const gistId = gistIdInput ? gistIdInput.value.trim() : '';
+            const gistToken = gistTokenInput ? gistTokenInput.value.trim() : '';
+
+            if (!gistId || !gistToken) {
+                showToast('Veuillez renseigner un Gist ID et un Token.', 'warning');
+                return;
+            }
+
+            testGistBtn.disabled = true;
+            testGistBtn.textContent = 'Synchronisation...';
+
+            try {
+                // Sauvegarder d'abord pour persister les tokens
+                await saveAppSettings({ gistId, gistToken });
+
+                chrome.runtime.sendMessage({ action: 'syncGist' }, (response) => {
+                    if (response?.success) {
+                        showToast('Synchronisation Gist réussie !');
+                    } else {
+                        showToast(`Échec: ${response?.message || 'Erreur réseau/token'}`, 'error');
+                    }
+                    testGistBtn.disabled = false;
+                    testGistBtn.textContent = 'Tester & Synchroniser';
+                });
+            } catch (err) {
+                showToast('Erreur lors du test de synchronisation.', 'error');
+                testGistBtn.disabled = false;
+                testGistBtn.textContent = 'Tester & Synchroniser';
+            }
+        });
+    }
 
     // =========================================================================
     // EXPORT & IMPORT JSON

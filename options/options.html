@@ -71,7 +71,30 @@
                 </div>
             </section>
 
-            <!-- Section 4 : Sauvegarde & Restauration -->
+            <!-- Section 4 : Synchronisation Cloud & Mobile (GitHub Gist) -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>☁️ Synchronisation Mobile (GitHub Gist)</h2>
+                    <p class="card-desc">Synchronisez vos lectures avec votre smartphone via un Gist GitHub privé (gratuit, sans serveur).</p>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="gist-id-input">ID du Gist secret :</label>
+                        <input type="text" id="gist-id-input" class="text-control" placeholder="ex: 7a8b9c0d1e2f3a4b..." autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="gist-token-input">GitHub Personal Access Token (PAT) :</label>
+                        <input type="password" id="gist-token-input" class="text-control" placeholder="ghp_... ou github_pat_... (portée 'gists')" autocomplete="off">
+                        <span class="field-hint">Token créé sur GitHub avec l'accès en écriture aux gists (scope <code>gist</code>).</span>
+                    </div>
+                    <div class="gist-actions">
+                        <button type="button" id="test-gist-btn" class="btn btn-secondary">Tester & Synchroniser</button>
+                        <a href="../pwa/index.html" target="_blank" class="btn btn-outline" rel="noopener">Ouvrir la PWA Mobile</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 5 : Sauvegarde & Restauration -->
             <section class="card">
                 <div class="card-header">
                     <h2>💾 Sauvegarde & Restauration</h2>

@@ -4,6 +4,7 @@
  */
 
 import { checkBookmarksForUpdates } from './background/scraper.js';
+import { syncStorageWithGist } from './background/gist-sync.js';
 import { CONSTANTS, extractEpisodeNumber, updateBadgeCount, getAppSettings } from './utils.js';
 
 // Initialisation à l'installation ou mise à jour de l'extension
@@ -12,14 +13,16 @@ chrome.runtime.onInstalled.addListener(async () => {
     await restoreBadge();
     setupAlarm();
     setupContextMenus();
-    checkBookmarksForUpdates();
+    await checkBookmarksForUpdates();
+    await syncStorageWithGist();
 });
 
 // Initialisation au démarrage du navigateur
 chrome.runtime.onStartup.addListener(async () => {
     await restoreBadge();
     setupAlarm();
-    checkBookmarksForUpdates();
+    await checkBookmarksForUpdates();
+    await syncStorageWithGist();
 });
 
 /**
@@ -127,16 +130,22 @@ async function setupAlarm() {
 }
 
 // Déclencheur d'alarme
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === CONSTANTS.ALARM_NAME) {
-        checkBookmarksForUpdates();
+        await checkBookmarksForUpdates();
+        await syncStorageWithGist();
     }
 });
 
 // Écouteur central de messages inter-processus
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'forceCheck') {
-        checkBookmarksForUpdates().then(() => sendResponse({ status: 'done' }));
+        checkBookmarksForUpdates().then(() => syncStorageWithGist()).then(() => sendResponse({ status: 'done' }));
+        return true;
+    }
+    
+    if (request.action === 'syncGist') {
+        syncStorageWithGist().then((result) => sendResponse(result));
         return true;
     }
     
@@ -251,6 +260,9 @@ async function handleMarkAsRead(request, sender) {
             // Mise à jour centralisée du badge
             const updatedData = await chrome.storage.local.get(null);
             await updateBadgeCount(updatedData);
+
+            // Propagation asynchrone vers le Gist
+            syncStorageWithGist().catch(e => console.error("Erreur synchro Gist après lecture:", e));
         }
     } catch (error) {
         console.error("Erreur lors du marquage comme lu:", error);

@@ -237,6 +237,42 @@
         }
     }
 
+    .text-control {
+        width: 100%;
+        background: var(--bg-color);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 9px 12px;
+        color: var(--text-color);
+        font-size: 0.9rem;
+        outline: none;
+        transition: border-color var(--transition-fast);
+
+        &:focus {
+            border-color: var(--primary);
+        }
+    }
+
+    .field-hint {
+        display: block;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-top: 4px;
+
+        & code {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+    }
+
+    .gist-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+    }
+
     /* Toggle Switch */
     .switch-label {
         display: flex;

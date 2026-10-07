@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0b1120">
+    <meta name="description" content="Suivi mobile et validation de vos lectures de mangas, scans et animes.">
+    <title>Check Anime & Scans — Suivi Mobile</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icons/favicon48.png">
+    <link rel="apple-touch-icon" href="icons/favicon128.png">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <header class="app-header">
+            <div class="brand">
+                <img src="icons/favicon48.png" alt="Logo" class="brand-icon" width="32" height="32">
+                <h1 class="brand-title">Check Scans</h1>
+            </div>
+            <div class="header-actions">
+                <button type="button" id="refresh-btn" class="icon-btn" aria-label="Actualiser les lectures" title="Actualiser">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                </button>
+                <button type="button" id="open-settings-btn" class="icon-btn" aria-label="Paramètres de synchronisation" title="Paramètres">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <section class="controls-panel">
+            <div class="search-wrapper">
+                <input type="search" id="search-input" class="search-input" placeholder="Rechercher un manga..." autocomplete="off">
+            </div>
+            <nav class="filter-tabs" aria-label="Filtres de statut">
+                <button type="button" class="tab-btn active" data-filter="all">Tous</button>
+                <button type="button" class="tab-btn" data-filter="unread">À lire</button>
+                <button type="button" class="tab-btn" data-filter="scans">Scans</button>
+                <button type="button" class="tab-btn" data-filter="animes">Animes</button>
+            </nav>
+        </section>
+
+        <main class="main-content" id="main-content">
+            <div id="loading-state" class="state-message">
+                <div class="spinner"></div>
+                <p>Chargement des lectures depuis GitHub...</p>
+            </div>
+
+            <div id="unconfigured-state" class="state-message hidden">
+                <p class="state-title">Configuration requise</p>
+                <p class="state-desc">Renseignez votre Token GitHub et votre Gist ID pour synchroniser vos lectures.</p>
+                <button type="button" id="setup-btn" class="btn btn-primary">Configurer la synchronisation</button>
+            </div>
+
+            <div id="empty-state" class="state-message hidden">
+                <p class="state-title">Aucun manga trouvé</p>
+                <p class="state-desc">Aucune entrée ne correspond aux critères de filtre.</p>
+            </div>
+
+            <div id="items-grid" class="items-grid" aria-live="polite"></div>
+        </main>
+
+        <!-- Dialogue Modal de Réglages Natif -->
+        <dialog id="settings-dialog" class="modal-dialog">
+            <form method="dialog" id="settings-form" class="modal-form">
+                <div class="modal-header">
+                    <h2>Réglages de Synchronisation</h2>
+                    <button type="button" id="close-dialog-btn" class="icon-btn-close" aria-label="Fermer">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">Vos données sont stockées de manière sécurisée dans le stockage local de votre navigateur.</p>
+                    <div class="form-field">
+                        <label for="gist-id-field">ID du Gist secret :</label>
+                        <input type="text" id="gist-id-field" class="form-input" placeholder="ex: 7a8b9c0d1e2f3a4b..." autocomplete="off" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="gist-token-field">GitHub Token (PAT) :</label>
+                        <input type="password" id="gist-token-field" class="form-input" placeholder="ghp_... ou github_pat_..." autocomplete="off" required>
+                        <span class="field-note">Token avec droit d'écriture sur les Gists (scope <code>gist</code>).</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Enregistrer & Charger</button>
+                </div>
+            </form>
+        </dialog>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

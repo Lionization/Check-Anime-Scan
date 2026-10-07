@@ -24,6 +24,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialisation
     loadData();
+    try {
+        chrome.runtime.sendMessage({ action: 'syncGist' }, (res) => {
+            if (res?.success) {
+                chrome.storage.local.get(null).then(data => {
+                    currentUpdates = data || {};
+                    renderList(currentUpdates, searchInput.value.toLowerCase().trim());
+                });
+            }
+        });
+    } catch {
+        // Ignorer si le service worker est occupé
+    }
 
     // Ouverture des options
     if (optionsBtn) {
