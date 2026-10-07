@@ -98,6 +98,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Chargement initial (cache d'abord, puis réseau)
     loadInitialData();
+
+    // Actualisation automatique au retour sur l'application (sortie de veille / changement d'onglet)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            loadDataFromGist(false);
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        loadDataFromGist(false);
+    });
+
+    // Vérification périodique toutes les 3 minutes si la PWA reste active à l'écran
+    setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            loadDataFromGist(false);
+        }
+    }, 180000);
 });
 
 /**
