@@ -50,8 +50,8 @@
                 <input type="search" id="search-input" class="search-input" placeholder="Rechercher un manga..." autocomplete="off">
             </div>
             <nav class="filter-tabs" aria-label="Filtres de statut">
-                <button type="button" class="tab-btn active" data-filter="all">Tous</button>
-                <button type="button" class="tab-btn" data-filter="unread">À lire</button>
+                <button type="button" class="tab-btn active" data-filter="unread">À lire</button>
+                <button type="button" class="tab-btn" data-filter="all">Tous</button>
                 <button type="button" class="tab-btn" data-filter="scans">Scans</button>
                 <button type="button" class="tab-btn" data-filter="animes">Animes</button>
             </nav>
@@ -94,6 +94,14 @@
                         <label for="gist-token-field">GitHub Token (PAT) :</label>
                         <input type="password" id="gist-token-field" class="form-input" placeholder="ghp_... ou github_pat_..." autocomplete="off" required>
                         <span class="field-note">Token avec droit d'écriture sur les Gists (scope <code>gist</code>).</span>
+                    </div>
+
+                    <div class="form-field push-notif-section">
+                        <label>Notifications Mobiles (Web Push) :</label>
+                        <button type="button" id="toggle-push-btn" class="btn btn-secondary">
+                            Activer les notifications directes
+                        </button>
+                        <span id="push-status-label" class="field-note">Recevez une alerte sur votre téléphone dès qu'un scan sort.</span>
                     </div>
                 </div>
                 <div class="modal-footer">

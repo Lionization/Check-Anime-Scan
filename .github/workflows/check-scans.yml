@@ -21,9 +21,13 @@ jobs:
         with:
           node-version: 24
 
+      - name: Installation des dépendances
+        run: npm install --omit=dev
+
       - name: Vérification des sorties et mise à jour du Gist
         env:
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: |
           node scripts/cloud-scraper.mjs

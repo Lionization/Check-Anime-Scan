@@ -12,17 +12,21 @@ const STORAGE_KEYS = {
 
 const GITHUB_API_URL = 'https://api.github.com/gists';
 const GIST_FILENAME = 'suivi.json';
+const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8upQXLnus7cFx1pGJV7HXddnw4y_wtgvVHMg';
 
 // État de l'application
 let allItems = {};
-let activeFilter = 'all';
+let activeFilter = 'unread';
 let searchQuery = '';
 let isSyncing = false;
+let currentPushSubscription = null;
 
 // Enregistrement du Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch((err) => {
+        navigator.serviceWorker.register('./sw.js').then((reg) => {
+            initPushNotificationUI(reg);
+        }).catch((err) => {
             console.log('Erreur SW:', err);
         });
     });
@@ -40,6 +44,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeDialogBtn = document.getElementById('close-dialog-btn');
     const gistIdField = document.getElementById('gist-id-field');
     const gistTokenField = document.getElementById('gist-token-field');
+    const togglePushBtn = document.getElementById('toggle-push-btn');
+
+    if (togglePushBtn) {
+        togglePushBtn.addEventListener('click', () => {
+            handleTogglePushSubscription();
+        });
+    }
 
     // Éléments du dialogue de modification de chapitre
     const chapterDialog = document.getElementById('chapter-dialog');
@@ -626,4 +637,151 @@ function showToast(message, isError = false) {
     window._toastTimeout = setTimeout(() => {
         toast.classList.add('hidden');
     }, 2800);
+}
+
+/**
+ * =========================================================================
+ * WEB PUSH NOTIFICATIONS
+ * =========================================================================
+ */
+
+/**
+ * Convertit une clé publique VAPID base64 en Uint8Array
+ * @param {string} base64String 
+ * @returns {Uint8Array}
+ */
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+/**
+ * Initialise l'interface des notifications push
+ * @param {ServiceWorkerRegistration} reg 
+ */
+async function initPushNotificationUI(reg) {
+    if (!('PushManager' in window)) {
+        const section = document.querySelector('.push-notif-section');
+        if (section) section.style.display = 'none';
+        return;
+    }
+
+    try {
+        const sub = await reg.pushManager.getSubscription();
+        currentPushSubscription = sub;
+        updatePushUI(!!sub);
+    } catch (err) {
+        console.error('Erreur vérification push:', err);
+    }
+}
+
+/**
+ * Met à jour le libellé et le bouton de notification
+ * @param {boolean} isSubscribed 
+ */
+function updatePushUI(isSubscribed) {
+    const btn = document.getElementById('toggle-push-btn');
+    const label = document.getElementById('push-status-label');
+    if (!btn || !label) return;
+
+    if (isSubscribed) {
+        btn.textContent = 'Désactiver les notifications';
+        btn.className = 'btn btn-outline';
+        label.textContent = 'Notifications actives sur cet appareil.';
+    } else {
+        btn.textContent = 'Activer les notifications directes';
+        btn.className = 'btn btn-secondary';
+        label.textContent = 'Recevez une alerte sur votre téléphone dès qu’un scan sort.';
+    }
+}
+
+/**
+ * Active ou désactive l'abonnement Web Push
+ */
+async function handleTogglePushSubscription() {
+    const btn = document.getElementById('toggle-push-btn');
+    if (!btn || !('serviceWorker' in navigator)) return;
+
+    btn.disabled = true;
+
+    try {
+        const reg = await navigator.serviceWorker.ready;
+
+        if (currentPushSubscription) {
+            // Désabonnement
+            await currentPushSubscription.unsubscribe();
+            currentPushSubscription = null;
+            await saveSubscriptionToGist(null);
+            updatePushUI(false);
+            showToast('Notifications désactivées.');
+        } else {
+            // Demande d'autorisation
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                showToast('Autorisation refusée par le navigateur.', true);
+                btn.disabled = false;
+                return;
+            }
+
+            // Inscription PushManager
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+
+            currentPushSubscription = sub;
+            await saveSubscriptionToGist(sub.toJSON());
+            updatePushUI(true);
+            showToast('Notifications activées sur ce téléphone !');
+        }
+    } catch (err) {
+        console.error('Erreur bascule notification:', err);
+        showToast('Erreur activation notification.', true);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/**
+ * Sauvegarde la souscription Web Push dans le Gist secret
+ * @param {PushSubscriptionJSON|null} subJson 
+ */
+async function saveSubscriptionToGist(subJson) {
+    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
+    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN);
+    if (!gistId || !gistToken) return;
+
+    try {
+        const payload = {
+            version: 1,
+            updatedAt: Date.now(),
+            _pushSubscription: subJson,
+            items: allItems
+        };
+
+        await fetch(`${GITHUB_API_URL}/${gistId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${gistToken}`,
+                'Accept': 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'X-GitHub-Api-Version': '2022-11-28'
+            },
+            body: JSON.stringify({
+                files: {
+                    [GIST_FILENAME]: {
+                        content: JSON.stringify(payload, null, 2)
+                    }
+                }
+            })
+        });
+    } catch (err) {
+        console.error('Erreur sauvegarde push Gist:', err);
+    }
 }

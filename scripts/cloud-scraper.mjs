@@ -6,11 +6,20 @@
 import { parseAnimeSama } from '../background/adapters/anime-sama.js';
 import { parseWebtoons } from '../background/adapters/webtoons.js';
 import { parseMangago } from '../background/adapters/mangago.js';
+import webpush from 'web-push';
 
 const GIST_ID = process.env.GIST_ID;
 const GIST_TOKEN = process.env.GIST_TOKEN;
 const GIST_FILENAME = 'suivi.json';
 const GITHUB_API_URL = 'https://api.github.com/gists';
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8upQXLnus7cFx1pGJV7HXddnw4y_wtgvVHMg';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:check-anime-scan@example.com';
+
+if (VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 
 if (!GIST_ID || !GIST_TOKEN) {
     console.log("Variables GIST_ID ou GIST_TOKEN absentes. Arrêt du scraper cloud.");
@@ -116,6 +125,7 @@ async function run() {
 
     console.log(`Analyse de ${entries.length} séries en cours...`);
     let hasChanges = false;
+    const newReleases = [];
 
     for (const [key, item] of entries) {
         const targetUrl = item.url || key;
@@ -135,6 +145,11 @@ async function run() {
             }
             item.updatedAt = Date.now();
             hasChanges = true;
+            newReleases.push({
+                title: item.title || key,
+                state: scraped.text,
+                url: targetUrl
+            });
         }
     }
 
@@ -143,6 +158,7 @@ async function run() {
         const payload = {
             version: 1,
             updatedAt: Date.now(),
+            _pushSubscription: parsed._pushSubscription || null,
             items: items
         };
 
@@ -165,6 +181,26 @@ async function run() {
 
         if (patchRes.ok) {
             console.log("Gist mis à jour avec succès.");
+
+            // Envoi des notifications Web Push sur le smartphone si abonné
+            if (newReleases.length > 0 && parsed._pushSubscription && VAPID_PRIVATE_KEY) {
+                console.log(`Envoi de ${newReleases.length} notification(s) Web Push vers votre smartphone...`);
+                for (const rel of newReleases) {
+                    try {
+                        await webpush.sendNotification(
+                            parsed._pushSubscription,
+                            JSON.stringify({
+                                title: `Nouveau scan / anime !`,
+                                body: `${rel.title} — ${rel.state}`,
+                                url: rel.url
+                            })
+                        );
+                        console.log(`Notification envoyée avec succès pour : ${rel.title}`);
+                    } catch (pushErr) {
+                        console.error(`Erreur notification (${rel.title}):`, pushErr.message);
+                    }
+                }
+            }
         } else {
             console.error("Échec de la mise à jour du Gist:", patchRes.status);
         }
