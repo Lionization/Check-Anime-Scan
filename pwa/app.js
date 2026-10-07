@@ -116,15 +116,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     settingsForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const gistId = gistIdField.value.trim();
+        const rawGistId = gistIdField.value.trim();
+        const cleanGistId = extractGistId(rawGistId);
         const gistToken = gistTokenField.value.trim();
 
-        if (gistId && gistToken) {
-            localStorage.setItem(STORAGE_KEYS.GIST_ID, gistId);
-            localStorage.setItem(STORAGE_KEYS.GIST_TOKEN, gistToken);
+        if (cleanGistId) {
+            localStorage.setItem(STORAGE_KEYS.GIST_ID, cleanGistId);
+            gistIdField.value = cleanGistId;
+            if (gistToken) {
+                localStorage.setItem(STORAGE_KEYS.GIST_TOKEN, gistToken);
+            }
             settingsDialog.close();
             showToast('Paramètres enregistrés !');
             loadDataFromGist(true);
+        } else {
+            showToast('Identifiant Gist manquant ou invalide', true);
         }
     });
 
@@ -297,6 +303,18 @@ function updateCloudCheckUI(timestamp) {
 }
 
 /**
+ * Extrait un identifiant Gist propre (32 caractères hexadécimaux ou slug) même si une URL complète a été fournie
+ * @param {string|null|undefined} raw 
+ * @returns {string}
+ */
+function extractGistId(raw) {
+    if (!raw) return '';
+    const cleaned = String(raw).trim();
+    const match = cleaned.match(/([a-f0-9]{20,40})/i);
+    return match ? match[1] : cleaned;
+}
+
+/**
  * Charge les données initiales : affichage immédiat depuis le cache puis rafraîchissement réseau
  */
 async function loadInitialData() {
@@ -319,10 +337,10 @@ async function loadInitialData() {
         }
     }
 
-    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
-    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN);
+    const rawGistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
+    const gistId = extractGistId(rawGistId);
 
-    if (!gistId || !gistToken) {
+    if (!gistId) {
         if (!cached) setViewState('unconfigured');
         return;
     }
@@ -336,14 +354,15 @@ async function loadInitialData() {
 }
 
 /**
- * Récupère les données depuis l'API GitHub Gist
+ * Récupère les données depuis l'API GitHub Gist avec repli automatique sans authentification
  * @param {boolean} showLoading 
  */
 async function loadDataFromGist(showLoading = false) {
-    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
-    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN);
+    const rawGistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
+    const gistId = extractGistId(rawGistId);
+    const gistToken = (localStorage.getItem(STORAGE_KEYS.GIST_TOKEN) || '').trim();
 
-    if (!gistId || !gistToken) {
+    if (!gistId) {
         setViewState('unconfigured');
         return;
     }
@@ -352,35 +371,82 @@ async function loadDataFromGist(showLoading = false) {
     setSyncStatus('syncing', 'Synchronisation...');
     isSyncing = true;
 
-    try {
-        const response = await fetch(`${GITHUB_API_URL}/${gistId}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${gistToken}`,
-                'Accept': 'application/vnd.github+json',
-                'X-GitHub-Api-Version': '2022-11-28'
+    let fetchError = null;
+    let data = null;
+    let usedAuth = false;
+
+    // 1. Première tentative avec le token si renseigné
+    if (gistToken) {
+        try {
+            const response = await fetch(`${GITHUB_API_URL}/${gistId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${gistToken}`,
+                    'Accept': 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28'
+                }
+            });
+
+            if (response.ok) {
+                data = await response.json();
+                usedAuth = true;
+            } else {
+                fetchError = new Error(`HTTP ${response.status}`);
             }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+        } catch (err) {
+            fetchError = err;
         }
+    }
 
-        const data = await response.json();
+    // 2. Repli gracieux : lecture publique sans Authorization (supporté nativement par les Gists secrets)
+    if (!data) {
+        try {
+            const anonResponse = await fetch(`${GITHUB_API_URL}/${gistId}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28'
+                }
+            });
+
+            if (anonResponse.ok) {
+                data = await anonResponse.json();
+            } else if (!fetchError) {
+                fetchError = new Error(`HTTP ${anonResponse.status}`);
+            }
+        } catch (anonErr) {
+            if (!fetchError) fetchError = anonErr;
+        }
+    }
+
+    // Traitement des données si l'une des requêtes a abouti
+    if (data) {
         const fileObj = data?.files?.[GIST_FILENAME];
 
         if (fileObj && fileObj.content) {
-            const parsed = JSON.parse(fileObj.content);
-            allItems = parsed.items || parsed.mangas || parsed || {};
-            localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
-            localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
+            try {
+                const parsed = JSON.parse(fileObj.content);
+                allItems = parsed.items || parsed.mangas || parsed || {};
+                localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
+                localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
 
-            if (parsed.lastCloudCheckAt) {
-                localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_CHECK, parsed.lastCloudCheckAt.toString());
-                updateCloudCheckUI(parsed.lastCloudCheckAt);
+                if (parsed.lastCloudCheckAt) {
+                    localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_CHECK, parsed.lastCloudCheckAt.toString());
+                    updateCloudCheckUI(parsed.lastCloudCheckAt);
+                }
+
+                if (gistToken && !usedAuth && fetchError && fetchError.message.includes('401')) {
+                    setSyncStatus('synced', 'Lecture seule (Token expiré)');
+                    showToast('Données chargées. Attention : Token GitHub expiré, renouvelez-le pour sauvegarder.', true);
+                } else if (!gistToken) {
+                    setSyncStatus('synced', 'Lecture seule');
+                } else {
+                    setSyncStatus('synced', 'À l’instant');
+                }
+            } catch (jsonErr) {
+                console.error('Erreur de parsing du Gist:', jsonErr);
+                setSyncStatus('error', 'Format JSON corrompu');
             }
-
-            setSyncStatus('synced', 'À l’instant');
         } else {
             allItems = {};
             setSyncStatus('synced', 'Synchronisé');
@@ -388,37 +454,40 @@ async function loadDataFromGist(showLoading = false) {
 
         setViewState('ready');
         renderItems();
-    } catch (error) {
-        console.error('Erreur Gist fetch:', error);
-        let errorLabel = 'Erreur réseau';
-        const msg = error.message || '';
-
-        if (msg.includes('401')) {
-            errorLabel = 'Token expiré (401)';
-            showToast('Votre Token GitHub PAT a expiré ou est invalide. Vérifiez vos réglages.', true);
-        } else if (msg.includes('403')) {
-            errorLabel = 'Quota atteint (403)';
-            showToast('Limite de requêtes GitHub atteinte temporairement.', true);
-        } else if (msg.includes('404')) {
-            errorLabel = 'Gist introuvable (404)';
-            showToast('L’identifiant du Gist secret est introuvable.', true);
-        } else if (!navigator.onLine) {
-            errorLabel = 'Hors-ligne';
-            showToast('Aucune connexion Internet détectée.', false);
-        } else {
-            showToast(`Erreur réseau (${msg || 'connexion interrompue'})`, true);
-        }
-
-        setSyncStatus('error', errorLabel);
-        if (Object.keys(allItems).length > 0) {
-            setViewState('ready');
-            renderItems();
-        } else {
-            setViewState('unconfigured');
-        }
-    } finally {
         isSyncing = false;
+        return;
     }
+
+    // Échec total des deux requêtes (réseau coupé ou Gist introuvable)
+    console.error('Erreur Gist fetch finale:', fetchError);
+    let errorLabel = 'Erreur réseau';
+    const msg = (fetchError && fetchError.message) ? fetchError.message : '';
+
+    if (msg.includes('401')) {
+        errorLabel = 'Token expiré (401)';
+        showToast('Votre Token GitHub PAT a expiré ou est invalide. Vérifiez vos réglages.', true);
+    } else if (msg.includes('403')) {
+        errorLabel = 'Quota atteint (403)';
+        showToast('Limite de requêtes GitHub atteinte temporairement.', true);
+    } else if (msg.includes('404')) {
+        errorLabel = 'Gist introuvable (404)';
+        showToast('L’identifiant du Gist secret est introuvable.', true);
+    } else if (!navigator.onLine) {
+        errorLabel = 'Hors-ligne';
+        showToast('Aucune connexion Internet détectée.', false);
+    } else {
+        errorLabel = `Erreur (${msg || 'réseau'})`;
+        showToast(`Erreur réseau (${msg || 'connexion interrompue'})`, true);
+    }
+
+    setSyncStatus('error', errorLabel);
+    if (Object.keys(allItems).length > 0) {
+        setViewState('ready');
+        renderItems();
+    } else {
+        setViewState('unconfigured');
+    }
+    isSyncing = false;
 }
 
 /**
@@ -739,10 +808,16 @@ async function incrementChapter(urlKey) {
  * Pousse l'ensemble des données vers le Gist GitHub avec file d'attente hors-ligne
  */
 async function saveItemsToGist() {
-    const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
-    const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN);
+    const rawGistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
+    const gistId = extractGistId(rawGistId);
+    const gistToken = (localStorage.getItem(STORAGE_KEYS.GIST_TOKEN) || '').trim();
 
-    if (!gistId || !gistToken) return;
+    if (!gistId || !gistToken) {
+        if (!gistToken) {
+            showToast('Token GitHub requis pour sauvegarder vos modifications', true);
+        }
+        return;
+    }
 
     // Si le terminal est actuellement hors-ligne, mise en file d'attente locale
     if (!navigator.onLine) {
