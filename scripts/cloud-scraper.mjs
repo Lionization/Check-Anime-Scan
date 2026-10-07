@@ -198,6 +198,9 @@ async function run() {
                         console.log(`Notification envoyée avec succès pour : ${rel.title}`);
                     } catch (pushErr) {
                         console.error(`Erreur notification (${rel.title}):`, pushErr.message);
+                        if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+                            console.log("Abonnement Web Push expiré ou révoqué par le terminal.");
+                        }
                     }
                 }
             }

@@ -624,6 +624,7 @@ async function saveItemsToGist() {
         const payload = {
             version: 1,
             updatedAt: Date.now(),
+            _pushSubscription: currentPushSubscription ? (typeof currentPushSubscription.toJSON === 'function' ? currentPushSubscription.toJSON() : currentPushSubscription) : undefined,
             items: allItems
         };
 

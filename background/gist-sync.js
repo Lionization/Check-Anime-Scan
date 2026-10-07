@@ -58,7 +58,8 @@ export async function fetchGistData(gistId, token) {
         const parsed = JSON.parse(fileObj.content);
         return {
             items: parsed.items || parsed.mangas || parsed || {},
-            updatedAt: parsed.updatedAt || Date.now()
+            updatedAt: parsed.updatedAt || Date.now(),
+            _pushSubscription: parsed._pushSubscription || null
         };
     } catch (error) {
         console.error('Erreur lors de la lecture du Gist:', error);
@@ -71,9 +72,10 @@ export async function fetchGistData(gistId, token) {
  * @param {string} gistId 
  * @param {string} token 
  * @param {Record<string, any>} items 
+ * @param {any} [pushSubscription]
  * @returns {Promise<boolean>}
  */
-export async function updateGistData(gistId, token, items) {
+export async function updateGistData(gistId, token, items, pushSubscription = undefined) {
     if (!gistId || !token) return false;
 
     try {
@@ -82,6 +84,10 @@ export async function updateGistData(gistId, token, items) {
             updatedAt: Date.now(),
             items: items
         };
+
+        if (pushSubscription !== undefined) {
+            payload._pushSubscription = pushSubscription;
+        }
 
         const response = await fetch(`${GITHUB_API_URL}/${gistId.trim()}`, {
             method: 'PATCH',
@@ -209,7 +215,7 @@ export async function syncStorageWithGist() {
 
     // 5. Pousser vers le Gist si l'état distant doit être actualisé
     if (hasGistChanges || !gistData) {
-        await updateGistData(settings.gistId, settings.gistToken, mergedGistItems);
+        await updateGistData(settings.gistId, settings.gistToken, mergedGistItems, gistData?._pushSubscription);
     }
 
     return { success: true, message: 'Synchronisation réussie' };
