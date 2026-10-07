@@ -661,6 +661,8 @@ function renderItems() {
         const safeTitle = escapeHtml(item.title || 'Sans titre');
         const safeUserProgress = escapeHtml(item.userProgress || 'Non commencé');
         const safeLatestState = escapeHtml(item.latestState || 'Inconnu');
+        const safeUrl = sanitizeUrl(item.url || urlKey);
+
         // Calcul du lien d'ouverture : ciblage direct de l'activité principale Chrome (Main) avec nouvelle tâche
         const isAndroid = /Android/i.test(navigator.userAgent);
         let openHref = safeUrl;
