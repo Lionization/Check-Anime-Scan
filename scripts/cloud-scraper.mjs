@@ -153,62 +153,61 @@ async function run() {
         }
     }
 
-    if (hasChanges) {
-        console.log("Mise à jour du Gist avec les nouveautés...");
-        const payload = {
-            version: 1,
-            updatedAt: Date.now(),
-            _pushSubscription: parsed._pushSubscription || null,
-            items: items
-        };
+    // Toujours enregistrer le passage du robot cloud et les éventuelles nouveautés
+    console.log("Enregistrement du passage cloud et synchronisation Gist...");
+    const payload = {
+        version: 1,
+        updatedAt: hasChanges ? Date.now() : (parsed.updatedAt || Date.now()),
+        lastCloudCheckAt: Date.now(),
+        _pushSubscription: parsed._pushSubscription || null,
+        items: items
+    };
 
-        const patchRes = await fetch(`${GITHUB_API_URL}/${GIST_ID}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${GIST_TOKEN}`,
-                'Accept': 'application/vnd.github+json',
-                'Content-Type': 'application/json',
-                'X-GitHub-Api-Version': '2022-11-28'
-            },
-            body: JSON.stringify({
-                files: {
-                    [GIST_FILENAME]: {
-                        content: JSON.stringify(payload, null, 2)
-                    }
+    const patchRes = await fetch(`${GITHUB_API_URL}/${GIST_ID}`, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${GIST_TOKEN}`,
+            'Accept': 'application/vnd.github+json',
+            'Content-Type': 'application/json',
+            'X-GitHub-Api-Version': '2022-11-28'
+        },
+        body: JSON.stringify({
+            files: {
+                [GIST_FILENAME]: {
+                    content: JSON.stringify(payload, null, 2)
                 }
-            })
-        });
+            }
+        })
+    });
 
-        if (patchRes.ok) {
-            console.log("Gist mis à jour avec succès.");
+    if (patchRes.ok) {
+        console.log("Gist mis à jour avec succès.");
 
-            // Envoi des notifications Web Push sur le smartphone si abonné
-            if (newReleases.length > 0 && parsed._pushSubscription && VAPID_PRIVATE_KEY) {
-                console.log(`Envoi de ${newReleases.length} notification(s) Web Push vers votre smartphone...`);
-                for (const rel of newReleases) {
-                    try {
-                        await webpush.sendNotification(
-                            parsed._pushSubscription,
-                            JSON.stringify({
-                                title: `Nouveau scan / anime !`,
-                                body: `${rel.title} — ${rel.state}`,
-                                url: rel.url
-                            })
-                        );
-                        console.log(`Notification envoyée avec succès pour : ${rel.title}`);
-                    } catch (pushErr) {
-                        console.error(`Erreur notification (${rel.title}):`, pushErr.message);
-                        if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
-                            console.log("Abonnement Web Push expiré ou révoqué par le terminal.");
-                        }
+        // Envoi des notifications Web Push sur le smartphone si nouveautés détectées
+        if (newReleases.length > 0 && parsed._pushSubscription && VAPID_PRIVATE_KEY) {
+            console.log(`Envoi de ${newReleases.length} notification(s) Web Push vers votre smartphone...`);
+            for (const rel of newReleases) {
+                try {
+                    await webpush.sendNotification(
+                        parsed._pushSubscription,
+                        JSON.stringify({
+                            title: `Nouveau scan / anime !`,
+                            body: `${rel.title} — ${rel.state}`,
+                            url: rel.url,
+                            mangaTitle: rel.title
+                        })
+                    );
+                    console.log(`Notification envoyée avec succès pour : ${rel.title}`);
+                } catch (pushErr) {
+                    console.error(`Erreur notification (${rel.title}):`, pushErr.message);
+                    if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+                        console.log("Abonnement Web Push expiré ou révoqué par le terminal.");
                     }
                 }
             }
-        } else {
-            console.error("Échec de la mise à jour du Gist:", patchRes.status);
         }
     } else {
-        console.log("Aucune nouvelle sortie détectée.");
+        console.error("Échec de la mise à jour du Gist:", patchRes.status);
     }
 }
 

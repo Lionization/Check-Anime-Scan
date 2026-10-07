@@ -7,7 +7,9 @@ const STORAGE_KEYS = {
     GIST_ID: 'check_scans_gist_id',
     GIST_TOKEN: 'check_scans_gist_token',
     CACHED_DATA: 'check_scans_cached_data',
-    LAST_SYNC_TIME: 'check_scans_last_sync'
+    LAST_SYNC_TIME: 'check_scans_last_sync',
+    LAST_CLOUD_CHECK: 'check_scans_last_cloud_check',
+    PENDING_SYNC: 'check_scans_pending_sync'
 };
 
 const GITHUB_API_URL = 'https://api.github.com/gists';
@@ -177,6 +179,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 180000);
 
+    // Gestion du mode hors-ligne et retour de la connectivité réseau
+    window.addEventListener('online', () => {
+        processPendingSyncQueue();
+    });
+
+    window.addEventListener('offline', () => {
+        setSyncStatus('error', 'Hors-ligne');
+    });
+
     // Initialisation du geste Pull-to-Refresh
     initPullToRefresh();
 });
@@ -257,11 +268,45 @@ function formatRelativeSyncTime(timestamp) {
 }
 
 /**
+ * Met à jour les libellés indiquant l'heure du dernier passage cloud
+ * @param {number|null} timestamp 
+ */
+function updateCloudCheckUI(timestamp) {
+    const label = document.getElementById('cloud-check-label');
+    const modalLabel = document.getElementById('cloud-check-modal-label');
+    if (!timestamp) return;
+
+    const elapsedMs = Date.now() - timestamp;
+    const elapsedMinutes = Math.floor(elapsedMs / 60000);
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+
+    let text = '';
+    if (elapsedMinutes < 1) {
+        text = 'Cloud : à l’instant';
+    } else if (elapsedMinutes < 60) {
+        text = `Cloud : il y a ${elapsedMinutes}m`;
+    } else if (elapsedHours < 24) {
+        const remMin = elapsedMinutes % 60;
+        text = `Cloud : il y a ${elapsedHours}h${remMin > 0 ? remMin + 'm' : ''}`;
+    } else {
+        text = `Cloud : ${new Date(timestamp).toLocaleDateString()}`;
+    }
+
+    if (label) label.textContent = `• ${text}`;
+    if (modalLabel) modalLabel.textContent = `Robot Cloud : dernier passage ${text.replace('Cloud : ', '')} (analyse auto toutes les 3h)`;
+}
+
+/**
  * Charge les données initiales : affichage immédiat depuis le cache puis rafraîchissement réseau
  */
 async function loadInitialData() {
     const cached = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
     const lastSync = parseInt(localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME) || '0', 10);
+    const cachedCloudCheck = parseInt(localStorage.getItem(STORAGE_KEYS.LAST_CLOUD_CHECK) || '0', 10);
+
+    if (cachedCloudCheck > 0) {
+        updateCloudCheckUI(cachedCloudCheck);
+    }
 
     if (cached) {
         try {
@@ -283,6 +328,11 @@ async function loadInitialData() {
     }
 
     await loadDataFromGist(false);
+
+    // Vérification d'une synchronisation hors-ligne en attente
+    if (localStorage.getItem(STORAGE_KEYS.PENDING_SYNC) === '1' && navigator.onLine) {
+        processPendingSyncQueue();
+    }
 }
 
 /**
@@ -324,6 +374,12 @@ async function loadDataFromGist(showLoading = false) {
             allItems = parsed.items || parsed.mangas || parsed || {};
             localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
             localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
+
+            if (parsed.lastCloudCheckAt) {
+                localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_CHECK, parsed.lastCloudCheckAt.toString());
+                updateCloudCheckUI(parsed.lastCloudCheckAt);
+            }
+
             setSyncStatus('synced', 'À l’instant');
         } else {
             allItems = {};
@@ -456,8 +512,19 @@ function renderItems() {
 
     emptyEl.classList.add('hidden');
 
-    // Tri alphabétique par titre
-    filtered.sort((a, b) => (a[1].title || '').localeCompare(b[1].title || ''));
+    // Tri selon l'onglet actif :
+    if (activeFilter === 'unread') {
+        // Dans "À lire" : les séries ayant eu une sortie récente en premier, puis alphabétique
+        filtered.sort((a, b) => {
+            const timeA = a[1].updatedAt || 0;
+            const timeB = b[1].updatedAt || 0;
+            if (timeB !== timeA) return timeB - timeA;
+            return (a[1].title || '').localeCompare(b[1].title || '');
+        });
+    } else {
+        // Tri alphabétique par titre par défaut
+        filtered.sort((a, b) => (a[1].title || '').localeCompare(b[1].title || ''));
+    }
 
     filtered.forEach(([urlKey, item]) => {
         const numUser = extractEpisodeNumber(item.userProgress);
@@ -610,13 +677,21 @@ async function incrementChapter(urlKey) {
 }
 
 /**
- * Pousse l'ensemble des données vers le Gist GitHub
+ * Pousse l'ensemble des données vers le Gist GitHub avec file d'attente hors-ligne
  */
 async function saveItemsToGist() {
     const gistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
     const gistToken = localStorage.getItem(STORAGE_KEYS.GIST_TOKEN);
 
     if (!gistId || !gistToken) return;
+
+    // Si le terminal est actuellement hors-ligne, mise en file d'attente locale
+    if (!navigator.onLine) {
+        localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, '1');
+        setSyncStatus('syncing', 'En attente réseau');
+        showToast('Enregistré hors-ligne. Synchro automatique dès reconnexion.');
+        return;
+    }
 
     setSyncStatus('syncing', 'Sauvegarde...');
 
@@ -647,18 +722,37 @@ async function saveItemsToGist() {
 
         if (!response.ok) {
             console.error('Erreur PATCH Gist:', response.status);
+            localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, '1');
             setSyncStatus('error', 'Erreur sauvegarde');
-            showToast('Erreur de synchronisation réseau', true);
+            showToast('Erreur de synchronisation réseau (mise en attente)', true);
         } else {
+            localStorage.removeItem(STORAGE_KEYS.PENDING_SYNC);
             localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
             setSyncStatus('synced', 'À l’instant');
             showToast('Synchronisé avec GitHub Gist');
         }
     } catch (err) {
         console.error('Erreur lors de la sauvegarde Gist:', err);
-        setSyncStatus('error', 'Erreur réseau');
-        showToast('Erreur réseau lors de la sauvegarde', true);
+        localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, '1');
+        setSyncStatus('error', 'En attente réseau');
+        showToast('Enregistré hors-ligne. Synchro dès reconnexion.');
     }
+}
+
+/**
+ * Traite et pousse automatiquement les modifications locales enregistrées hors-ligne
+ */
+async function processPendingSyncQueue() {
+    if (!navigator.onLine) return;
+    const isPending = localStorage.getItem(STORAGE_KEYS.PENDING_SYNC) === '1';
+    if (!isPending) {
+        loadDataFromGist(false);
+        return;
+    }
+
+    console.log('Traitement de la file d’attente hors-ligne...');
+    showToast('Reconnexion : synchronisation de vos lectures...');
+    await saveItemsToGist();
 }
 
 /**

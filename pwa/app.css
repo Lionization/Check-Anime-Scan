@@ -127,6 +127,20 @@ body {
     font-weight: 500;
 }
 
+.cloud-check-label {
+    font-size: 0.70rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.cloud-info-box {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
 @keyframes pulse {
     from { opacity: 0.4; }
     to { opacity: 1; }

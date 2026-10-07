@@ -4,7 +4,7 @@
  */
 
 // Horodatage automatique de la version du cache (AnnéeMoisJour_HeureMinute)
-const CACHE_NAME = 'check-scans-20261007_2230';
+const CACHE_NAME = 'check-scans-20261007_2240';
 
 const APP_SHELL = [
     './',
@@ -81,33 +81,54 @@ self.addEventListener('push', (event) => {
     }
 
     const title = payload.title || 'Check Anime & Scans';
+    const scanUrl = payload.url || '';
     const options = {
         body: payload.body || 'Une nouvelle sortie a été détectée.',
         icon: './icons/favicon128.png',
         badge: './icons/favicon48.png',
         vibrate: [100, 50, 100],
         data: {
-            url: payload.url || './'
-        }
+            url: scanUrl || './'
+        },
+        actions: scanUrl ? [
+            {
+                action: 'read_scan',
+                title: 'Lire le scan'
+            },
+            {
+                action: 'open_app',
+                title: 'Ouvrir l’app'
+            }
+        ] : []
     };
 
     event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Gestion du clic sur la notification
+// Gestion du clic sur la notification et ses boutons d'action
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const targetUrl = event.notification.data?.url || './';
+    const action = event.action;
+    const scanUrl = event.notification.data?.url;
 
+    // Action "Lire le scan" : ouvre directement le site de lecture
+    if (action === 'read_scan' && scanUrl && scanUrl !== './') {
+        event.waitUntil(
+            clients.openWindow ? clients.openWindow(scanUrl) : Promise.resolve()
+        );
+        return;
+    }
+
+    // Action par défaut ou "Ouvrir l'app" : focalise la PWA ou ouvre index.html
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
             for (const client of clientList) {
-                if (client.url && 'focus' in client) {
+                if ('focus' in client) {
                     return client.focus();
                 }
             }
             if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
+                return clients.openWindow('./');
             }
         })
     );
