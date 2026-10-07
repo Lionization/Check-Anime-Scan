@@ -4,7 +4,7 @@
  */
 
 // Horodatage automatique de la version du cache (AnnéeMoisJour_HeureMinute)
-const CACHE_NAME = 'check-scans-20261007_2240';
+const CACHE_NAME = 'check-scans-20261007_2250';
 
 const APP_SHELL = [
     './',
@@ -14,7 +14,8 @@ const APP_SHELL = [
     './manifest.json',
     './icons/favicon16.png',
     './icons/favicon48.png',
-    './icons/favicon128.png'
+    './icons/favicon128.png',
+    './icons/favicon500.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -102,12 +103,22 @@ self.addEventListener('push', (event) => {
         ] : []
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    const showPromise = self.registration.showNotification(title, options);
+    const badgePromise = ('setAppBadge' in self.navigator)
+        ? self.navigator.setAppBadge().catch(() => {})
+        : Promise.resolve();
+
+    event.waitUntil(Promise.all([showPromise, badgePromise]));
 });
 
 // Gestion du clic sur la notification et ses boutons d'action
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
+
+    if ('clearAppBadge' in self.navigator) {
+        self.navigator.clearAppBadge().catch(() => {});
+    }
+
     const action = event.action;
     const scanUrl = event.notification.data?.url;
 
