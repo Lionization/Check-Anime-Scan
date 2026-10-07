@@ -2,8 +2,8 @@ name: Vérification Périodique des Sorties (Scraper Cloud)
 
 on:
   schedule:
-    # Exécution automatique toutes les 6 heures
-    - cron: '0 */6 * * *'
+    # Exécution automatique toutes les 3 heures
+    - cron: '0 */3 * * *'
   workflow_dispatch:
     # Déclenchement manuel depuis l'interface GitHub Actions
 
