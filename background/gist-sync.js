@@ -182,6 +182,7 @@ export async function syncStorageWithGist() {
             localLatestNum > gistLatestNum ||
             localProgressNum > gistProgressNum ||
             localItem.latestState !== existingGist.latestState ||
+            localItem.isNew !== existingGist.isNew ||
             (!existingGist.image && localItem.image);
 
         if (shouldUpdateGist) {
@@ -191,6 +192,7 @@ export async function syncStorageWithGist() {
                 category: localItem.category || 'SCANS',
                 userProgress: localProgressNum >= gistProgressNum ? (localItem.userProgress || '') : (existingGist.userProgress || ''),
                 latestState: localItem.latestState || existingGist.latestState || '',
+                isNew: localItem.isNew || false,
                 image: localItem.image || existingGist.image || null,
                 updatedAt: Date.now()
             };

@@ -137,6 +137,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Initialisation Push dès que le Service Worker est prêt
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((reg) => {
+            initPushNotificationUI(reg);
+        });
+    }
+
     // Chargement initial (cache d'abord, puis réseau)
     loadInitialData();
 
@@ -350,8 +357,28 @@ function setViewState(state) {
  */
 function extractEpisodeNumber(str) {
     if (!str || typeof str !== 'string') return 0;
+    const hiddenMatch = str.match(/\|#(\d+(?:\.\d+)?)\|/);
+    if (hiddenMatch) {
+        return parseFloat(hiddenMatch[1]);
+    }
     const match = str.match(/(\d+(?:\.\d+)?)/);
     return match ? parseFloat(match[1]) : 0;
+}
+
+/**
+ * Détermine si un manga/anime a des sorties non lues en attente
+ * @param {any} item 
+ * @returns {boolean}
+ */
+function isItemUnread(item) {
+    if (!item || typeof item !== 'object') return false;
+    if (item.isNew === true) return true;
+    const numUser = extractEpisodeNumber(item.userProgress);
+    const numLatest = extractEpisodeNumber(item.latestState);
+    if (numLatest > numUser) return true;
+    if (!item.userProgress && !!item.latestState) return true;
+    if (item.userProgress && item.latestState && item.userProgress !== item.latestState && !numLatest && !numUser) return true;
+    return false;
 }
 
 /**
@@ -360,10 +387,7 @@ function extractEpisodeNumber(str) {
 function updateAppBadge() {
     let unreadCount = 0;
     for (const item of Object.values(allItems)) {
-        if (!item || typeof item !== 'object') continue;
-        const numUser = extractEpisodeNumber(item.userProgress);
-        const numLatest = extractEpisodeNumber(item.latestState);
-        if (numLatest > numUser || (!item.userProgress && item.latestState)) {
+        if (isItemUnread(item)) {
             unreadCount++;
         }
     }
@@ -398,9 +422,7 @@ function renderItems() {
         }
 
         const category = (item.category || '').toUpperCase();
-        const numUser = extractEpisodeNumber(item.userProgress);
-        const numLatest = extractEpisodeNumber(item.latestState);
-        const hasUnread = numLatest > numUser || (!item.userProgress && item.latestState);
+        const hasUnread = isItemUnread(item);
 
         if (activeFilter === 'unread') return hasUnread;
         if (activeFilter === 'scans') return category === 'SCANS';
@@ -666,9 +688,17 @@ function urlBase64ToUint8Array(base64String) {
  * @param {ServiceWorkerRegistration} reg 
  */
 async function initPushNotificationUI(reg) {
+    const btn = document.getElementById('toggle-push-btn');
+    const label = document.getElementById('push-status-label');
+
     if (!('PushManager' in window)) {
-        const section = document.querySelector('.push-notif-section');
-        if (section) section.style.display = 'none';
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Non disponible dans cet onglet';
+        }
+        if (label) {
+            label.textContent = 'Sur iPhone : installez l’application sur votre écran d’accueil (Partager > Sur l’écran d’accueil) puis ouvrez-la depuis son icône pour débloquer les notifications.';
+        }
         return;
     }
 

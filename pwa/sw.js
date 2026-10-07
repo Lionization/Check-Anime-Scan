@@ -4,7 +4,7 @@
  */
 
 // Horodatage automatique de la version du cache (AnnéeMoisJour_HeureMinute)
-const CACHE_NAME = 'check-scans-20261007_2120';
+const CACHE_NAME = 'check-scans-20261007_2210';
 
 const APP_SHELL = [
     './',
