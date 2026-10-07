@@ -33,6 +33,10 @@ if (!GIST_ID || !GIST_TOKEN) {
  */
 function extractEpisodeNumber(str) {
     if (!str || typeof str !== 'string') return 0;
+    const hiddenMatch = str.match(/\|#(\d+(?:\.\d+)?)\|/);
+    if (hiddenMatch) {
+        return parseFloat(hiddenMatch[1]);
+    }
     const match = str.match(/(\d+(?:\.\d+)?)/);
     return match ? parseFloat(match[1]) : 0;
 }

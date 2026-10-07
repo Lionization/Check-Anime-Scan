@@ -434,6 +434,35 @@ function extractEpisodeNumber(str) {
 }
 
 /**
+ * Échappe les caractères HTML dangereux pour neutraliser tout risque XSS
+ * @param {string|null|undefined} str 
+ * @returns {string}
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * Valide et sécurise une URL pour les attributs href et src
+ * @param {string|null|undefined} url 
+ * @returns {string}
+ */
+function sanitizeUrl(url) {
+    if (!url) return '#';
+    const trimmed = String(url).trim();
+    if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+        return escapeHtml(trimmed);
+    }
+    return '#';
+}
+
+/**
  * Détermine si un manga/anime a des sorties non lues en attente
  * @param {any} item 
  * @returns {boolean}
@@ -534,20 +563,24 @@ function renderItems() {
         const card = document.createElement('article');
         card.className = `manga-card ${hasUpdate ? 'has-update' : ''}`;
 
-        // Jaquette
+        // Jaquette sécurisée
         const coverEl = item.image 
-            ? `<img src="${item.image}" alt="${item.title || 'Manga'}" class="manga-cover" loading="lazy">`
+            ? `<img src="${sanitizeUrl(item.image)}" alt="${escapeHtml(item.title || 'Manga')}" class="manga-cover" loading="lazy">`
             : `<div class="manga-cover-placeholder">📖</div>`;
 
-        const categoryTag = (item.category || 'SCANS').toUpperCase();
+        const categoryTag = escapeHtml((item.category || 'SCANS').toUpperCase());
         const categoryClass = categoryTag === 'ANIMES' ? 'tag-animes' : 'tag-scans';
+        const safeTitle = escapeHtml(item.title || 'Sans titre');
+        const safeUserProgress = escapeHtml(item.userProgress || 'Non commencé');
+        const safeLatestState = escapeHtml(item.latestState || 'Inconnu');
+        const safeUrl = sanitizeUrl(item.url);
 
         card.innerHTML = `
             ${coverEl}
             <div class="manga-details">
                 <div>
                     <div class="manga-header">
-                        <h2 class="manga-title">${item.title || 'Sans titre'}</h2>
+                        <h2 class="manga-title">${safeTitle}</h2>
                         <span class="tag-badge ${categoryClass}">${categoryTag}</span>
                     </div>
 
@@ -557,7 +590,7 @@ function renderItems() {
                         <div class="progress-row">
                             <span class="progress-label">Dernier lu :</span>
                             <div class="progress-val-wrapper">
-                                <span class="progress-val">${item.userProgress || 'Non commencé'}</span>
+                                <span class="progress-val">${safeUserProgress}</span>
                                 <button type="button" class="btn-edit-progress" data-action="edit" data-key="${encodeURIComponent(urlKey)}" title="Modifier manuellement">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12 20h9"></path>
@@ -568,7 +601,7 @@ function renderItems() {
                         </div>
                         <div class="progress-row">
                             <span class="progress-label">Dernier sorti :</span>
-                            <span class="progress-val highlight">${item.latestState || 'Inconnu'}</span>
+                            <span class="progress-val highlight">${safeLatestState}</span>
                         </div>
                     </div>
                 </div>
@@ -576,13 +609,13 @@ function renderItems() {
                 <div class="manga-actions">
                     ${hasUpdate ? `
                         <button type="button" class="action-btn btn-read-next" data-action="catchup" data-key="${encodeURIComponent(urlKey)}">
-                            Valider lu (${item.latestState})
+                            Valider lu (${safeLatestState})
                         </button>
                     ` : ''}
                     <button type="button" class="action-btn btn-plus-one" data-action="plusone" data-key="${encodeURIComponent(urlKey)}" title="Incrémenter d'un chapitre">
                         +1
                     </button>
-                    <a href="${item.url || '#'}" target="_blank" rel="noopener" class="action-btn btn-open-link" title="Ouvrir le lien">
+                    <a href="${safeUrl}" target="_blank" rel="noopener" class="action-btn btn-open-link" title="Ouvrir le lien">
                         Ouvrir
                     </a>
                 </div>
