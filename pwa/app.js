@@ -775,11 +775,51 @@ async function loadDataFromGist(showLoading = false) {
 
     // Traitement des données si l'une des requêtes a abouti
     if (data) {
-        const fileObj = data?.files?.[GIST_FILENAME];
+        let fileObj = data?.files?.[GIST_FILENAME];
+        if (!fileObj && data?.files) {
+            // Repli sur le premier fichier .json disponible dans le Gist si le nom diffère
+            const jsonKey = Object.keys(data.files).find(k => k.endsWith('.json') || k.toLowerCase().includes('suivi'));
+            if (jsonKey) fileObj = data.files[jsonKey];
+        }
 
-        if (fileObj && fileObj.content) {
+        if (fileObj) {
+            let jsonString = fileObj.content;
+
+            // Si le fichier est tronqué par l'API GitHub Gist ou si le contenu direct est manquant, on télécharge le raw_url
+            if ((fileObj.truncated || !jsonString) && fileObj.raw_url) {
+                try {
+                    const rawResp = await fetch(fileObj.raw_url, {
+                        headers: gistToken ? { 'Authorization': `Bearer ${gistToken}` } : {}
+                    });
+                    if (rawResp.ok) {
+                        jsonString = await rawResp.text();
+                    }
+                } catch (rawErr) {
+                    console.warn('Erreur lors du téléchargement du raw_url:', rawErr);
+                }
+            }
+
             try {
-                const parsed = JSON.parse(fileObj.content);
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(jsonString);
+                } catch (firstParseErr) {
+                    // Si le premier parse échoue, tentative de repli ultime via raw_url
+                    if (fileObj.raw_url) {
+                        const rawResp = await fetch(fileObj.raw_url, {
+                            headers: gistToken ? { 'Authorization': `Bearer ${gistToken}` } : {}
+                        });
+                        if (rawResp.ok) {
+                            const freshRaw = await rawResp.text();
+                            parsed = JSON.parse(freshRaw);
+                        } else {
+                            throw firstParseErr;
+                        }
+                    } else {
+                        throw firstParseErr;
+                    }
+                }
+
                 allItems = parsed.items || parsed.mangas || parsed || {};
                 localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
                 localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
@@ -800,10 +840,26 @@ async function loadDataFromGist(showLoading = false) {
             } catch (jsonErr) {
                 console.error('Erreur de parsing du Gist:', jsonErr);
                 setSyncStatus('error', 'Format JSON corrompu');
+                showToast('Fichier Gist corrompu ou malformé. Affichage des données en cache local.', true);
+
+                // Préservation du cache local pour éviter une page vide
+                const cached = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
+                if (cached) {
+                    try {
+                        allItems = JSON.parse(cached);
+                    } catch {}
+                }
             }
         } else {
-            allItems = {};
-            setSyncStatus('synced', 'Synchronisé');
+            console.warn('Fichier suivi.json absent du Gist');
+            setSyncStatus('error', 'Fichier suivi.json absent');
+            showToast('Le Gist ne contient pas de fichier suivi.json.', true);
+            const cached = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
+            if (cached) {
+                try {
+                    allItems = JSON.parse(cached);
+                } catch {}
+            }
         }
 
         setViewState('ready');
