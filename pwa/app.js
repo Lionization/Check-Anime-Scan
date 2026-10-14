@@ -792,18 +792,21 @@ async function loadDataFromGist(showLoading = false) {
             if (fileObj) {
                 let jsonString = '';
 
-                if (fileObj.truncated || !fileObj.content) {
-                    if (fileObj.raw_url) {
-                        try {
-                            const rawResp = await fetchWithTimeout(fileObj.raw_url, {}, 8000);
-                            if (rawResp.ok) {
-                                jsonString = await rawResp.text();
-                            }
-                        } catch (rawErr) {
-                            console.warn('Erreur lors du téléchargement direct de raw_url:', rawErr);
+                // Priorité absolue au téléchargement brut direct (raw_url) pour garantir 100% des données sans troncage REST API
+                if (fileObj.raw_url) {
+                    try {
+                        const rawUrlWithBust = `${fileObj.raw_url}${fileObj.raw_url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+                        const rawResp = await fetchWithTimeout(rawUrlWithBust, { cache: 'no-store' }, 10000);
+                        if (rawResp.ok) {
+                            jsonString = await rawResp.text();
                         }
+                    } catch (rawErr) {
+                        console.warn('Échec téléchargement direct raw_url:', rawErr);
                     }
-                } else {
+                }
+
+                // Repli sur le champ content direct si raw_url indisponible ou non tronqué
+                if (!jsonString && fileObj.content && !fileObj.truncated) {
                     jsonString = fileObj.content;
                 }
 
@@ -812,19 +815,7 @@ async function loadDataFromGist(showLoading = false) {
                     try {
                         parsed = JSON.parse(jsonString);
                     } catch {
-                        console.warn('Échec parsing content direct, tentative via raw_url...');
-                    }
-                }
-
-                if (!parsed && fileObj.raw_url) {
-                    try {
-                        const rawResp = await fetchWithTimeout(fileObj.raw_url, {}, 8000);
-                        if (rawResp.ok) {
-                            const freshText = await rawResp.text();
-                            parsed = JSON.parse(freshText);
-                        }
-                    } catch (secoursErr) {
-                        console.error('Échec secours raw_url:', secoursErr);
+                        console.warn('Échec parsing JSON principal...');
                     }
                 }
 
@@ -953,6 +944,59 @@ function sanitizeUrl(url) {
 }
 
 /**
+ * Nettoie une chaîne de statut pour l'affichage (supprime les tags techniques |#122|)
+ * @param {string|null|undefined} stateStr 
+ * @returns {string}
+ */
+function cleanStateDisplay(stateStr) {
+    if (!stateStr || typeof stateStr !== 'string') return '';
+    return stateStr.replace(/\s*\|#\d+(?:\.\d+)?\|\s*/g, '').trim();
+}
+
+/**
+ * Formate un horodatage (timestamp) en date ou temps relatif en français
+ * @param {number|undefined|null} timestamp Millisecondes Unix
+ * @returns {string}
+ */
+function formatRelativeTime(timestamp) {
+    if (!timestamp || typeof timestamp !== 'number') return '';
+    const now = Date.now();
+    const diffSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+    if (diffSeconds < 60) return "À l'instant";
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    if (diffMinutes < 60) return `Il y a ${diffMinutes} min`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Hier';
+    if (diffDays < 7) return `Il y a ${diffDays}j`;
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+/**
+ * Détermine de façon robuste la catégorie d'un élément (SCANS ou ANIMES)
+ * @param {any} item 
+ * @returns {'SCANS'|'ANIMES'}
+ */
+function getItemCategory(item) {
+    if (!item) return 'SCANS';
+    const cat = (item.category || '').toUpperCase().trim();
+    if (cat.includes('ANIME')) return 'ANIMES';
+    if (cat.includes('SCAN') || cat.includes('MANGA')) return 'SCANS';
+
+    // Heuristiques d'analyse de l'URL ou du texte d'état
+    const url = (item.url || '').toLowerCase();
+    if (url.includes('/scan') || url.includes('/chapitre') || url.includes('mangago') || url.includes('webtoon')) return 'SCANS';
+
+    const state = `${item.userProgress || ''} ${item.latestState || ''}`.toLowerCase();
+    if (state.includes('épisode') || state.includes('episode')) return 'ANIMES';
+    if (state.includes('chapitre') || state.includes('ch.') || state.includes('tome')) return 'SCANS';
+
+    return 'SCANS';
+}
+
+/**
  * Détermine si un manga/anime a des sorties non lues en attente
  * @param {any} item 
  * @returns {boolean}
@@ -960,11 +1004,29 @@ function sanitizeUrl(url) {
 function isItemUnread(item) {
     if (!item || typeof item !== 'object') return false;
     if (item.isNew === true) return true;
+    if (!item.userProgress && Boolean(item.latestState)) return true;
+    if (!item.latestState) return false;
+
+    const cleanUser = cleanStateDisplay(item.userProgress || '');
+    const cleanLatest = cleanStateDisplay(item.latestState || '');
+
+    // Si les deux états nettoyés sont strictement identiques -> lu
+    if (cleanUser && cleanLatest && cleanUser === cleanLatest) {
+        return false;
+    }
+
     const numUser = extractEpisodeNumber(item.userProgress);
     const numLatest = extractEpisodeNumber(item.latestState);
+
+    // Comparaison numérique classique si les deux ont un numéro
     if (numLatest > numUser) return true;
-    if (!item.userProgress && !!item.latestState) return true;
-    if (item.userProgress && item.latestState && item.userProgress !== item.latestState && !numLatest && !numUser) return true;
+    if (numLatest < numUser && numUser > 0 && numLatest > 0) return false;
+
+    // Si les numéros sont identiques ou absents mais que les libellés diffèrent (ex: dates, sous-titres, bonus)
+    if (cleanUser !== cleanLatest) {
+        return true;
+    }
+
     return false;
 }
 
@@ -1039,7 +1101,7 @@ function renderItems() {
             return false;
         }
 
-        const category = (item.category || '').toUpperCase();
+        const category = getItemCategory(item);
         const hasUnread = isItemUnread(item);
 
         if (activeFilter === 'unread' && !hasUnread) return false;
@@ -1080,7 +1142,7 @@ function renderItems() {
 
     // Tri selon le mode actif :
     if (currentSort === 'date') {
-        // Mode Date : nouveautés prioritaires (si lecture en attente), puis date de modification la plus récente, puis alphabétique
+        // Mode Date : nouveautés prioritaires (si lecture en attente), puis horodatage le plus récent (timestamp ou updatedAt), puis alphabétique
         filtered.sort((a, b) => {
             const hasUnreadA = isItemUnread(a[1]);
             const hasUnreadB = isItemUnread(b[1]);
@@ -1089,8 +1151,8 @@ function renderItems() {
                 return hasUnreadB ? 1 : -1;
             }
 
-            const timeA = a[1].updatedAt || 0;
-            const timeB = b[1].updatedAt || 0;
+            const timeA = a[1].timestamp || a[1].updatedAt || 0;
+            const timeB = b[1].timestamp || b[1].updatedAt || 0;
             if (timeB !== timeA) return timeB - timeA;
 
             return (a[1].title || '').localeCompare(b[1].title || '');
@@ -1101,9 +1163,18 @@ function renderItems() {
     }
 
     filtered.forEach(([urlKey, item]) => {
-        const numUser = extractEpisodeNumber(item.userProgress);
-        const numLatest = extractEpisodeNumber(item.latestState);
-        const hasUpdate = numLatest > numUser;
+        const hasUpdate = isItemUnread(item);
+
+        const cleanUser = cleanStateDisplay(item.userProgress);
+        const cleanLatest = cleanStateDisplay(item.latestState);
+
+        const safeTitle = escapeHtml(item.title || 'Sans titre');
+        const safeUserProgress = escapeHtml(cleanUser || 'Non commencé');
+        const safeLatestState = escapeHtml(cleanLatest || 'Inconnu');
+        const safeUrl = sanitizeUrl(item.url || urlKey);
+
+        const itemTime = item.timestamp || item.updatedAt;
+        const relativeTimeStr = itemTime ? formatRelativeTime(itemTime) : '';
 
         const wrapper = document.createElement('div');
         wrapper.className = 'manga-card-wrapper';
@@ -1115,7 +1186,7 @@ function renderItems() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
-                <span>Glisser pour valider lu (${escapeHtml(item.latestState || '')})</span>
+                <span>Glisser pour valider lu (${safeLatestState})</span>
             `;
             wrapper.appendChild(actionBg);
         }
@@ -1125,20 +1196,16 @@ function renderItems() {
 
         // Jaquette sécurisée
         const coverEl = item.image 
-            ? `<img src="${sanitizeUrl(item.image)}" alt="${escapeHtml(item.title || 'Manga')}" class="manga-cover" loading="lazy">`
+            ? `<img src="${sanitizeUrl(item.image)}" alt="${safeTitle}" class="manga-cover" loading="lazy">`
             : `<div class="manga-cover-placeholder">📖</div>`;
 
-        const isAnime = (item.category || '').toUpperCase() === 'ANIMES';
+        const itemCat = getItemCategory(item);
+        const isAnime = itemCat === 'ANIMES';
         const categoryTag = isAnime ? 'ANIMES' : 'SCANS';
         const categoryClass = isAnime ? 'tag-animes' : 'tag-scans';
         const categoryIcon = isAnime
             ? `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/><polygon points="10 11 15 14.5 10 18 10 11" fill="currentColor"/></svg>`
             : `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/></svg>`;
-
-        const safeTitle = escapeHtml(item.title || 'Sans titre');
-        const safeUserProgress = escapeHtml(item.userProgress || 'Non commencé');
-        const safeLatestState = escapeHtml(item.latestState || 'Inconnu');
-        const safeUrl = sanitizeUrl(item.url || urlKey);
 
         // Calcul du lien d'ouverture : ciblage direct de l'activité principale Chrome (Main) avec nouvelle tâche
         const isAndroid = /Android/i.test(navigator.userAgent);
@@ -1158,8 +1225,6 @@ function renderItems() {
                         <span class="tag-badge ${categoryClass}">${categoryIcon}<span>${categoryTag}</span></span>
                     </div>
 
-                    ${hasUpdate ? `<span class="badge-unread">Nouveau disponible</span>` : ''}
-
                     <div class="progress-info">
                         <div class="progress-row">
                             <span class="progress-label">Dernier lu :</span>
@@ -1175,7 +1240,10 @@ function renderItems() {
                         </div>
                         <div class="progress-row">
                             <span class="progress-label">Dernier sorti :</span>
-                            <span class="progress-val highlight">${safeLatestState}</span>
+                            <div class="progress-val-wrapper">
+                                <span class="progress-val highlight">${safeLatestState}</span>
+                                ${relativeTimeStr ? `<span class="progress-date" title="Horodatage de la sortie">(${relativeTimeStr})</span>` : ''}
+                            </div>
                         </div>
                     </div>
                 </div>
