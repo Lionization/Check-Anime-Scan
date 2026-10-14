@@ -100,7 +100,7 @@
                             <input type="range" id="zen-volume-range" class="zen-volume-slider" min="0" max="1" step="0.05" value="0.7">
                         </div>
 
-                        <button type="button" id="zen-pip-btn" class="zen-btn-pip hidden" aria-label="Ouvrir le lecteur en fenêtre flottante Picture-in-Picture" title="Fenêtre flottante (PiP)">
+                        <button type="button" id="zen-pip-btn" class="zen-btn-pip" aria-label="Ouvrir le lecteur en fenêtre flottante Picture-in-Picture" title="Fenêtre flottante (PiP)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
                                 <rect x="11" y="9" width="9" height="6" rx="1"/>
@@ -123,17 +123,23 @@
             </div>
             <div class="controls-subbar">
                 <nav class="filter-tabs" aria-label="Filtres de statut">
-                    <button type="button" class="tab-btn active" data-filter="unread">À lire</button>
-                    <button type="button" class="tab-btn" data-filter="all">Tous</button>
-                    <button type="button" class="tab-btn" data-filter="scans">Scans</button>
-                    <button type="button" class="tab-btn" data-filter="animes">Animes</button>
+                    <button type="button" class="tab-btn active" data-filter="all">Tous</button>
+                    <button type="button" class="tab-btn" data-filter="unread">À lire</button>
                 </nav>
-                <button type="button" id="sort-toggle-btn" class="sort-btn" aria-label="Changer le mode de tri" title="Trier par date ou titre">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>
-                    </svg>
-                    <span id="sort-label">Date</span>
-                </button>
+                <div class="controls-actions">
+                    <button type="button" id="type-toggle-btn" class="sort-btn" aria-label="Filtrer par format (Tout, Scans ou Animes)" title="Format : Tout, Scans ou Animes">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+                        </svg>
+                        <span id="type-label">Tout</span>
+                    </button>
+                    <button type="button" id="sort-toggle-btn" class="sort-btn" aria-label="Changer le mode de tri" title="Trier par date ou titre">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>
+                        </svg>
+                        <span id="sort-label">Date</span>
+                    </button>
+                </div>
             </div>
         </section>
 

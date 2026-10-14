@@ -12,7 +12,8 @@ const STORAGE_KEYS = {
     PENDING_SYNC: 'check_scans_pending_sync',
     ZEN_STATION: 'check_scans_zen_station',
     ZEN_VOLUME: 'check_scans_zen_volume',
-    SORT_ORDER: 'check_scans_sort_order'
+    SORT_ORDER: 'check_scans_sort_order',
+    TYPE_FILTER: 'check_scans_type_filter'
 };
 
 const ZEN_STATIONS = {
@@ -59,8 +60,8 @@ const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8up
 const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION);
 
 // État de l'application
-let allItems = {};
-let activeFilter = 'unread';
+let activeFilter = 'all';
+let activeTypeFilter = localStorage.getItem(STORAGE_KEYS.TYPE_FILTER) || 'all';
 let searchQuery = '';
 let currentSort = localStorage.getItem(STORAGE_KEYS.SORT_ORDER) || 'date';
 let isSyncing = false;
@@ -131,11 +132,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedGistId) gistIdField.value = storedGistId;
     if (storedGistToken) gistTokenField.value = storedGistToken;
 
-    // Initialisation forcée de l'onglet 'unread' par défaut
-    activeFilter = 'unread';
+    // Initialisation forcée de l'onglet 'all' par défaut
+    activeFilter = 'all';
     filterTabs.forEach((tab) => {
-        const isUnread = tab.getAttribute('data-filter') === 'unread';
-        tab.classList.toggle('active', isUnread);
+        const isDefaultAll = tab.getAttribute('data-filter') === 'all';
+        tab.classList.toggle('active', isDefaultAll);
 
         tab.addEventListener('click', () => {
             filterTabs.forEach((t) => t.classList.remove('active'));
@@ -164,6 +165,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sortLabel) {
                 sortLabel.textContent = currentSort === 'date' ? 'Date' : 'A-Z';
             }
+            renderItems();
+        });
+    }
+
+    // Bascule du format (Tout / Scans / Animes)
+    const typeBtn = document.getElementById('type-toggle-btn');
+    const typeLabel = document.getElementById('type-label');
+    const updateTypeUI = () => {
+        if (!typeLabel) return;
+        if (activeTypeFilter === 'scans') typeLabel.textContent = 'Scans';
+        else if (activeTypeFilter === 'animes') typeLabel.textContent = 'Animes';
+        else typeLabel.textContent = 'Tout';
+    };
+    if (typeBtn) {
+        updateTypeUI();
+        typeBtn.addEventListener('click', () => {
+            if (activeTypeFilter === 'all') activeTypeFilter = 'scans';
+            else if (activeTypeFilter === 'scans') activeTypeFilter = 'animes';
+            else activeTypeFilter = 'all';
+
+            localStorage.setItem(STORAGE_KEYS.TYPE_FILTER, activeTypeFilter);
+            updateTypeUI();
             renderItems();
         });
     }
@@ -470,10 +493,13 @@ function initZenAudioPlayer() {
 
     // Prise en charge Document Picture-in-Picture (Tablettes & Ordinateurs Chromium)
     const pipBtn = document.getElementById('zen-pip-btn');
-    if (pipBtn && 'documentPictureInPicture' in window) {
-        pipBtn.classList.remove('hidden');
-
+    if (pipBtn) {
         pipBtn.addEventListener('click', async () => {
+            if (!('documentPictureInPicture' in window)) {
+                showToast('Picture-in-Picture non disponible sur ce navigateur (supporté sur Chrome Desktop & tablettes compatibles)', true);
+                return;
+            }
+
             try {
                 if (window.documentPictureInPicture.window) {
                     window.documentPictureInPicture.window.close();
@@ -518,6 +544,7 @@ function initZenAudioPlayer() {
                 }
             } catch (err) {
                 console.warn('Erreur Document PiP:', err);
+                showToast('Impossible d\'ouvrir la fenêtre PiP', true);
             }
         });
     }
@@ -942,9 +969,10 @@ function renderItems() {
         const category = (item.category || '').toUpperCase();
         const hasUnread = isItemUnread(item);
 
-        if (activeFilter === 'unread') return hasUnread;
-        if (activeFilter === 'scans') return category === 'SCANS';
-        if (activeFilter === 'animes') return category === 'ANIMES';
+        if (activeFilter === 'unread' && !hasUnread) return false;
+
+        if (activeTypeFilter === 'scans' && category !== 'SCANS') return false;
+        if (activeTypeFilter === 'animes' && category !== 'ANIMES') return false;
 
         return true;
     });
@@ -958,18 +986,13 @@ function renderItems() {
 
     // Tri selon le mode actif :
     if (currentSort === 'date') {
-        // Mode Date : nouveautés prioritaires, puis date de modification la plus récente, puis alphabétique
+        // Mode Date : nouveautés prioritaires (si lecture en attente), puis date de modification la plus récente, puis alphabétique
         filtered.sort((a, b) => {
-            const numUserA = extractEpisodeNumber(a[1].userProgress);
-            const numLatestA = extractEpisodeNumber(a[1].latestState);
-            const hasUpdateA = numLatestA > numUserA;
+            const hasUnreadA = isItemUnread(a[1]);
+            const hasUnreadB = isItemUnread(b[1]);
 
-            const numUserB = extractEpisodeNumber(b[1].userProgress);
-            const numLatestB = extractEpisodeNumber(b[1].latestState);
-            const hasUpdateB = numLatestB > numUserB;
-
-            if (hasUpdateB !== hasUpdateA) {
-                return hasUpdateB ? 1 : -1;
+            if (hasUnreadB !== hasUnreadA) {
+                return hasUnreadB ? 1 : -1;
             }
 
             const timeA = a[1].updatedAt || 0;
