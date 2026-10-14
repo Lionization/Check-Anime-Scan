@@ -9,13 +9,42 @@ const STORAGE_KEYS = {
     CACHED_DATA: 'check_scans_cached_data',
     LAST_SYNC_TIME: 'check_scans_last_sync',
     LAST_CLOUD_CHECK: 'check_scans_last_cloud_check',
-    PENDING_SYNC: 'check_scans_pending_sync'
+    PENDING_SYNC: 'check_scans_pending_sync',
+    ZEN_STATION: 'check_scans_zen_station',
+    ZEN_VOLUME: 'check_scans_zen_volume'
+};
+
+const ZEN_STATIONS = {
+    reyfm: {
+        id: 'reyfm',
+        name: 'Lofi Chillhop',
+        desc: 'Beats doux & relaxants',
+        url: 'https://listen.reyfm.de/lofi_128kbps.mp3'
+    },
+    plaza: {
+        id: 'plaza',
+        name: 'Nightwave Plaza',
+        desc: 'Tokyo Vapor & City Pop',
+        url: 'https://radio.plaza.one/mp3'
+    },
+    isekoi: {
+        id: 'isekoi',
+        name: 'ISEKOI Anime Chill',
+        desc: 'Cosmic Lounge & Anime Beats',
+        url: 'https://public.isekoi-radio.com/listen/chill/radio.mp3'
+    },
+    laut: {
+        id: 'laut',
+        name: 'Laut.fm Lofi Beats',
+        desc: 'Ambiance lecture & focus',
+        url: 'https://stream.laut.fm/lofi'
+    }
 };
 
 const GITHUB_API_URL = 'https://api.github.com/gists';
 const GIST_FILENAME = 'suivi.json';
 const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8upQXLnus7cFx1pGJV7HXddnw4y_wtgvVHMg';
-const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION) || '1.4.1';
+const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION);
 
 // État de l'application
 let allItems = {};
@@ -219,7 +248,180 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialisation du geste Pull-to-Refresh
     initPullToRefresh();
+
+    // Initialisation du lecteur d'ambiance Zen & Lofi
+    initZenAudioPlayer();
 });
+
+/**
+ * Initialise le lecteur d'ambiance sonore Zen & Lofi
+ * Supporte le streaming continu via CDN externe, navigator.mediaSession et persistance locale
+ */
+function initZenAudioPlayer() {
+    const toggleBtn = document.getElementById('zen-audio-toggle-btn');
+    const panel = document.getElementById('zen-player-panel');
+    const playBtn = document.getElementById('zen-play-btn');
+    const stationSelect = document.getElementById('zen-station-select');
+    const volumeRange = document.getElementById('zen-volume-range');
+    const closeBtn = document.getElementById('zen-close-panel-btn');
+    const audioElement = document.getElementById('zen-audio-element');
+    const audioBadge = document.getElementById('zen-audio-badge');
+    const visualizer = document.getElementById('zen-visualizer');
+    const stationNameEl = document.getElementById('zen-station-name');
+    const statusLabel = document.getElementById('zen-playback-status');
+
+    if (!toggleBtn || !panel || !playBtn || !audioElement) return;
+
+    const playIcon = playBtn.querySelector('.play-icon');
+    const pauseIcon = playBtn.querySelector('.pause-icon');
+
+    // Récupération des préférences persistées
+    const savedStationId = localStorage.getItem(STORAGE_KEYS.ZEN_STATION) || 'reyfm';
+    const savedVolume = parseFloat(localStorage.getItem(STORAGE_KEYS.ZEN_VOLUME) || '0.7');
+
+    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.reyfm;
+    if (stationSelect) {
+        stationSelect.value = currentStation.id;
+    }
+    if (volumeRange) {
+        volumeRange.value = savedVolume;
+    }
+    audioElement.volume = isNaN(savedVolume) ? 0.7 : Math.max(0, Math.min(1, savedVolume));
+
+    const updateMediaSession = () => {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: currentStation.name,
+                artist: 'Check Anime & Scans — Ambiance Zen',
+                album: currentStation.desc,
+                artwork: [
+                    { src: 'icons/favicon128.png', sizes: '128x128', type: 'image/png' },
+                    { src: 'icons/favicon500.png', sizes: '500x500', type: 'image/png' }
+                ]
+            });
+            navigator.mediaSession.setActionHandler('play', () => startAudio());
+            navigator.mediaSession.setActionHandler('pause', () => pauseAudio());
+            navigator.mediaSession.setActionHandler('stop', () => pauseAudio());
+        } catch (e) {
+            console.warn('MediaSession non supporté:', e);
+        }
+    };
+
+    const setUIPlaying = (isPlaying) => {
+        if (playIcon) playIcon.classList.toggle('hidden', isPlaying);
+        if (pauseIcon) pauseIcon.classList.toggle('hidden', !isPlaying);
+        if (visualizer) visualizer.classList.toggle('playing', isPlaying);
+        if (audioBadge) audioBadge.classList.toggle('playing', isPlaying);
+        playBtn.setAttribute('title', isPlaying ? 'Mettre en pause' : 'Lecture');
+        playBtn.setAttribute('aria-label', isPlaying ? 'Mettre en pause la musique' : 'Démarrer la musique');
+        if (statusLabel) {
+            statusLabel.textContent = isPlaying ? 'En direct' : 'En pause';
+        }
+    };
+
+    const startAudio = () => {
+        if (stationNameEl) stationNameEl.textContent = currentStation.name;
+        if (statusLabel) statusLabel.textContent = 'Connexion...';
+
+        if (audioElement.src !== currentStation.url) {
+            audioElement.src = currentStation.url;
+            audioElement.load();
+        }
+
+        const playPromise = audioElement.play();
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                setUIPlaying(true);
+                updateMediaSession();
+            }).catch((err) => {
+                console.warn('Lecture audio bloquée ou interrompue:', err);
+                setUIPlaying(false);
+                if (statusLabel) statusLabel.textContent = 'Flux indisponible';
+            });
+        }
+    };
+
+    const pauseAudio = () => {
+        audioElement.pause();
+        // Libération du tampon réseau pour les flux radio continus
+        audioElement.removeAttribute('src');
+        audioElement.load();
+        setUIPlaying(false);
+    };
+
+    // Gestion du bouton Lecture / Pause
+    playBtn.addEventListener('click', () => {
+        if (audioElement.paused || !audioElement.src) {
+            startAudio();
+        } else {
+            pauseAudio();
+        }
+    });
+
+    // Changement de station radio
+    if (stationSelect) {
+        stationSelect.addEventListener('change', (e) => {
+            const nextStationId = e.target.value;
+            if (ZEN_STATIONS[nextStationId]) {
+                const wasPlaying = !audioElement.paused && Boolean(audioElement.src);
+                currentStation = ZEN_STATIONS[nextStationId];
+                localStorage.setItem(STORAGE_KEYS.ZEN_STATION, nextStationId);
+                if (stationNameEl) stationNameEl.textContent = currentStation.name;
+
+                if (wasPlaying) {
+                    startAudio();
+                } else {
+                    if (statusLabel) statusLabel.textContent = 'Prêt';
+                }
+            }
+        });
+    }
+
+    // Réglage du volume
+    if (volumeRange) {
+        volumeRange.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            audioElement.volume = val;
+            localStorage.setItem(STORAGE_KEYS.ZEN_VOLUME, String(val));
+        });
+    }
+
+    // Bascule et fermeture du panneau rétractable
+    const togglePanel = (forceOpen) => {
+        const isHidden = panel.classList.contains('hidden');
+        const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isHidden;
+        panel.classList.toggle('hidden', !shouldOpen);
+        toggleBtn.setAttribute('aria-expanded', String(shouldOpen));
+        toggleBtn.classList.toggle('active', shouldOpen);
+    };
+
+    toggleBtn.addEventListener('click', () => {
+        togglePanel();
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            togglePanel(false);
+        });
+    }
+
+    // Événements du lecteur audio HTML5
+    audioElement.addEventListener('playing', () => {
+        setUIPlaying(true);
+    });
+
+    audioElement.addEventListener('waiting', () => {
+        if (statusLabel) statusLabel.textContent = 'Chargement...';
+    });
+
+    audioElement.addEventListener('error', () => {
+        setUIPlaying(false);
+        if (statusLabel) statusLabel.textContent = 'Erreur réseau';
+    });
+
+    if (stationNameEl) stationNameEl.textContent = currentStation.name;
+}
 
 /**
  * Configure le geste tactile Pull to Refresh sur mobile

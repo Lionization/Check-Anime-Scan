@@ -32,6 +32,13 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button type="button" id="zen-audio-toggle-btn" class="icon-btn" aria-label="Ambiance sonore Zen et Lofi" title="Ambiance sonore Zen & Lofi" aria-expanded="false" aria-controls="zen-player-panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+                    </svg>
+                    <span id="zen-audio-badge" class="audio-badge" aria-hidden="true"></span>
+                </button>
                 <button type="button" id="refresh-btn" class="icon-btn" aria-label="Actualiser les lectures" title="Actualiser">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
@@ -43,8 +50,61 @@
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                     </svg>
                 </button>
-            </div>
         </header>
+
+        <!-- Panneau Lecteur Ambiance Zen & Lofi -->
+        <section id="zen-player-panel" class="zen-player hidden" aria-label="Lecteur audio d'ambiance" aria-live="polite">
+            <div class="zen-player-content">
+                <div class="zen-track-info">
+                    <div class="zen-visualizer" id="zen-visualizer" aria-hidden="true">
+                        <span class="zen-bar"></span>
+                        <span class="zen-bar"></span>
+                        <span class="zen-bar"></span>
+                    </div>
+                    <div class="zen-meta">
+                        <span id="zen-station-name" class="zen-station-name">Lofi Chillhop</span>
+                        <span id="zen-playback-status" class="zen-playback-status">Prêt</span>
+                    </div>
+                </div>
+
+                <div class="zen-controls">
+                    <button type="button" id="zen-play-btn" class="zen-btn-play" aria-label="Démarrer la musique d'ambiance" title="Lecture">
+                        <svg class="play-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <svg class="pause-icon hidden" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="4" width="4" height="16"/>
+                            <rect x="14" y="4" width="4" height="16"/>
+                        </svg>
+                    </button>
+
+                    <div class="zen-station-picker">
+                        <label for="zen-station-select" class="sr-only">Choix de la station d'ambiance</label>
+                        <select id="zen-station-select" class="zen-select" aria-label="Choix de la station">
+                            <option value="reyfm">Lofi Chillhop (128k)</option>
+                            <option value="plaza">Nightwave Plaza (Japan Vapor/City Pop)</option>
+                            <option value="isekoi">ISEKOI Anime Chill</option>
+                            <option value="laut">Laut.fm Lofi Beats</option>
+                        </select>
+                    </div>
+
+                    <div class="zen-volume-wrapper" title="Volume">
+                        <label for="zen-volume-range" class="sr-only">Niveau du volume sonore</label>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="zen-volume-icon" aria-hidden="true">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                        </svg>
+                        <input type="range" id="zen-volume-range" class="zen-volume-slider" min="0" max="1" step="0.05" value="0.7">
+                    </div>
+
+                    <button type="button" id="zen-close-panel-btn" class="zen-btn-close" aria-label="Fermer le panneau d'ambiance" title="Fermer le panneau">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            <!-- Élément audio natif invisible -->
+            <audio id="zen-audio-element" preload="none"></audio>
+        </section>
 
         <section class="controls-panel">
             <div class="search-wrapper">

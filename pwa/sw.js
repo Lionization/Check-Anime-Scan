@@ -6,7 +6,7 @@
 // Source de vérité globale pour la version
 importScripts('./version.js');
 
-const CACHE_NAME = `check-scans-v${self.APP_VERSION || '1.0.0'}`;
+const CACHE_NAME = `check-scans-v${self.APP_VERSION}`;
 
 const APP_SHELL = [
     './',
@@ -49,8 +49,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // Ne jamais intercepter les requêtes directes à l'API GitHub
-    if (url.hostname.includes('api.github.com')) {
+    // Ne jamais intercepter les requêtes directes à l'API GitHub ni le streaming audio
+    if (url.hostname.includes('api.github.com') || event.request.destination === 'audio' || url.pathname.endsWith('.mp3')) {
         return;
     }
 
