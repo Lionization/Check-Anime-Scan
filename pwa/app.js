@@ -15,29 +15,40 @@ const STORAGE_KEYS = {
 };
 
 const ZEN_STATIONS = {
-    reyfm: {
-        id: 'reyfm',
-        name: 'Lofi Chillhop',
-        desc: 'Beats doux & relaxants',
-        url: 'https://listen.reyfm.de/lofi_128kbps.mp3'
+    koto: {
+        id: 'koto',
+        name: 'Koto & Shakuhachi (Temple Zen)',
+        desc: 'Ishikari Lore — Cordes traditionnelles & bambou',
+        url: 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ishikari%20Lore.mp3',
+        loop: true
+    },
+    eastern: {
+        id: 'eastern',
+        name: 'Méditation Japonaise (Zen)',
+        desc: 'Eastern Thought — Flûte Shakuhachi méditative',
+        url: 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/Eastern%20Thought.mp3',
+        loop: true
+    },
+    anime_ost: {
+        id: 'anime_ost',
+        name: 'Stereo Anime (OST & Soundtracks)',
+        desc: 'Bandes originales d’animes & jeux vidéo',
+        url: 'https://radio.stereoanime.com/listen/stereoanime/128',
+        loop: false
+    },
+    zen_ambient: {
+        id: 'zen_ambient',
+        name: 'Ambiance Zen & Nappes douces',
+        desc: 'Sons contemplatifs sans percussions',
+        url: 'https://streaming.hotmixradio.com/hotmix-zen-en-mp3?provider=radiobrowser',
+        loop: false
     },
     plaza: {
         id: 'plaza',
-        name: 'Nightwave Plaza',
-        desc: 'Tokyo Vapor & City Pop',
-        url: 'https://radio.plaza.one/mp3'
-    },
-    isekoi: {
-        id: 'isekoi',
-        name: 'ISEKOI Anime Chill',
-        desc: 'Cosmic Lounge & Anime Beats',
-        url: 'https://public.isekoi-radio.com/listen/chill/radio.mp3'
-    },
-    laut: {
-        id: 'laut',
-        name: 'Laut.fm Lofi Beats',
-        desc: 'Ambiance lecture & focus',
-        url: 'https://stream.laut.fm/lofi'
+        name: 'Nightwave Plaza (Tokyo City Pop)',
+        desc: 'Tokyo nostalgie & City Pop 80s',
+        url: 'https://radio.plaza.one/mp3',
+        loop: false
     }
 };
 
@@ -276,10 +287,10 @@ function initZenAudioPlayer() {
     const pauseIcon = playBtn.querySelector('.pause-icon');
 
     // Récupération des préférences persistées
-    const savedStationId = localStorage.getItem(STORAGE_KEYS.ZEN_STATION) || 'reyfm';
+    const savedStationId = localStorage.getItem(STORAGE_KEYS.ZEN_STATION) || 'koto';
     const savedVolume = parseFloat(localStorage.getItem(STORAGE_KEYS.ZEN_VOLUME) || '0.7');
 
-    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.reyfm;
+    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.koto;
     if (stationSelect) {
         stationSelect.value = currentStation.id;
     }
@@ -287,6 +298,25 @@ function initZenAudioPlayer() {
         volumeRange.value = savedVolume;
     }
     audioElement.volume = isNaN(savedVolume) ? 0.7 : Math.max(0, Math.min(1, savedVolume));
+
+    const switchStation = (direction) => {
+        const stationKeys = Object.keys(ZEN_STATIONS);
+        const currentIndex = stationKeys.indexOf(currentStation.id);
+        const newIndex = (currentIndex + direction + stationKeys.length) % stationKeys.length;
+        const nextStationId = stationKeys[newIndex];
+
+        currentStation = ZEN_STATIONS[nextStationId];
+        localStorage.setItem(STORAGE_KEYS.ZEN_STATION, nextStationId);
+
+        if (stationSelect) {
+            stationSelect.value = nextStationId;
+        }
+        if (stationNameEl) {
+            stationNameEl.textContent = currentStation.name;
+        }
+
+        startAudio();
+    };
 
     const updateMediaSession = () => {
         if (!('mediaSession' in navigator)) return;
@@ -303,6 +333,8 @@ function initZenAudioPlayer() {
             navigator.mediaSession.setActionHandler('play', () => startAudio());
             navigator.mediaSession.setActionHandler('pause', () => pauseAudio());
             navigator.mediaSession.setActionHandler('stop', () => pauseAudio());
+            navigator.mediaSession.setActionHandler('previoustrack', () => switchStation(-1));
+            navigator.mediaSession.setActionHandler('nexttrack', () => switchStation(1));
         } catch (e) {
             console.warn('MediaSession non supporté:', e);
         }
@@ -316,13 +348,15 @@ function initZenAudioPlayer() {
         playBtn.setAttribute('title', isPlaying ? 'Mettre en pause' : 'Lecture');
         playBtn.setAttribute('aria-label', isPlaying ? 'Mettre en pause la musique' : 'Démarrer la musique');
         if (statusLabel) {
-            statusLabel.textContent = isPlaying ? 'En direct' : 'En pause';
+            statusLabel.textContent = isPlaying ? (currentStation.loop ? 'Lecture (Boucle)' : 'En direct') : 'En pause';
         }
     };
 
     const startAudio = () => {
         if (stationNameEl) stationNameEl.textContent = currentStation.name;
         if (statusLabel) statusLabel.textContent = 'Connexion...';
+
+        audioElement.loop = Boolean(currentStation.loop);
 
         if (audioElement.src !== currentStation.url) {
             audioElement.src = currentStation.url;
