@@ -67,15 +67,8 @@ let currentSort = localStorage.getItem(STORAGE_KEYS.SORT_ORDER) || 'date';
 let isSyncing = false;
 let currentPushSubscription = null;
 
-let isRefreshing = false;
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!isRefreshing) {
-            isRefreshing = true;
-            window.location.reload();
-        }
-    });
-}
+// Écouteur Service Worker (sans rechargement en boucle infinie)
+// Le rafraîchissement est laissé au contrôle naturel de la PWA
 
 // Enregistrement et mise à jour du Service Worker
 function registerAppServiceWorker() {
@@ -106,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const openSettingsBtn = document.getElementById('open-settings-btn');
     const setupBtn = document.getElementById('setup-btn');
     const searchInput = document.getElementById('search-input');
-    const filterTabs = document.querySelectorAll('.tab-btn');
     const settingsDialog = document.getElementById('settings-dialog');
     const settingsForm = document.getElementById('settings-form');
     const closeDialogBtn = document.getElementById('close-dialog-btn');
@@ -134,34 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Bascule compacte du statut (Tous / À lire)
     const statusBtn = document.getElementById('status-toggle-btn');
-    const statusLabel = document.getElementById('status-label');
-    const statusIconAll = document.getElementById('status-icon-all');
-    const statusIconUnread = document.getElementById('status-icon-unread');
-
-    const updateStatusUI = () => {
-        if (!statusLabel) return;
-        const isUnread = activeFilter === 'unread';
-        let unreadCount = 0;
-        for (const it of Object.values(allItems)) {
-            if (isItemUnread(it)) unreadCount++;
-        }
-
-        if (isUnread) {
-            statusLabel.textContent = unreadCount > 0 ? `À lire (${unreadCount})` : 'À lire';
-            if (statusIconAll) statusIconAll.classList.add('hidden');
-            if (statusIconUnread) statusIconUnread.classList.remove('hidden');
-            statusBtn?.classList.add('active');
-        } else {
-            statusLabel.textContent = 'Tous';
-            if (statusIconAll) statusIconAll.classList.remove('hidden');
-            if (statusIconUnread) statusIconUnread.classList.add('hidden');
-            statusBtn?.classList.remove('active');
-        }
-    };
-
     if (statusBtn) {
         updateStatusUI();
-        statusBtn.addEventListener('click', () => {
+        statusBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             activeFilter = activeFilter === 'all' ? 'unread' : 'all';
             updateStatusUI();
             renderItems();
@@ -711,6 +679,8 @@ async function loadInitialData() {
         } catch {
             // Ignorer
         }
+    } else {
+        setViewState('ready');
     }
 
     const rawGistId = localStorage.getItem(STORAGE_KEYS.GIST_ID);
@@ -916,12 +886,8 @@ async function loadDataFromGist(showLoading = false) {
         setSyncStatus('error', errorLabel);
     } finally {
         isSyncing = false;
-        if (Object.keys(allItems).length > 0) {
-            setViewState('ready');
-            renderItems();
-        } else {
-            setViewState('unconfigured');
-        }
+        setViewState(Object.keys(allItems).length > 0 || gistId ? 'ready' : 'unconfigured');
+        renderItems();
     }
 }
 
@@ -1020,25 +986,35 @@ function updateAppBadge() {
         }
     }
 
-    // Mise à jour visuelle du libellé du bouton switcher statut
-    const statusLabel = document.getElementById('status-label');
+    updateStatusUI();
+}
+
+/**
+ * Met à jour le libellé et l'icône du bouton switcher de statut (Tous / À lire)
+ */
+function updateStatusUI() {
     const statusBtn = document.getElementById('status-toggle-btn');
+    const statusLabel = document.getElementById('status-label');
     const statusIconAll = document.getElementById('status-icon-all');
     const statusIconUnread = document.getElementById('status-icon-unread');
 
-    if (statusLabel) {
-        const isUnread = activeFilter === 'unread';
-        if (isUnread) {
-            statusLabel.textContent = unreadCount > 0 ? `À lire (${unreadCount})` : 'À lire';
-            if (statusIconAll) statusIconAll.classList.add('hidden');
-            if (statusIconUnread) statusIconUnread.classList.remove('hidden');
-            statusBtn?.classList.add('active');
-        } else {
-            statusLabel.textContent = 'Tous';
-            if (statusIconAll) statusIconAll.classList.remove('hidden');
-            if (statusIconUnread) statusIconUnread.classList.add('hidden');
-            statusBtn?.classList.remove('active');
-        }
+    if (!statusLabel) return;
+    const isUnread = activeFilter === 'unread';
+    let unreadCount = 0;
+    for (const it of Object.values(allItems)) {
+        if (isItemUnread(it)) unreadCount++;
+    }
+
+    if (isUnread) {
+        statusLabel.textContent = unreadCount > 0 ? `À lire (${unreadCount})` : 'À lire';
+        if (statusIconAll) statusIconAll.classList.add('hidden');
+        if (statusIconUnread) statusIconUnread.classList.remove('hidden');
+        statusBtn?.classList.add('active');
+    } else {
+        statusLabel.textContent = 'Tous';
+        if (statusIconAll) statusIconAll.classList.remove('hidden');
+        if (statusIconUnread) statusIconUnread.classList.add('hidden');
+        statusBtn?.classList.remove('active');
     }
 }
 
@@ -1087,8 +1063,7 @@ function renderItems() {
             if (showAllBtn) {
                 showAllBtn.addEventListener('click', () => {
                     activeFilter = 'all';
-                    const filterTabs = document.querySelectorAll('.tab-btn');
-                    filterTabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-filter') === 'all'));
+                    updateStatusUI();
                     renderItems();
                 });
             }

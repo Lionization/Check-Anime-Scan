@@ -618,6 +618,10 @@ body {
         color: #ffffff;
         border-color: var(--accent-blue);
     }
+
+    svg, span {
+        pointer-events: none;
+    }
 }
 
 /* ==========================================================================
