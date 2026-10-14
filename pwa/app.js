@@ -11,7 +11,8 @@ const STORAGE_KEYS = {
     LAST_CLOUD_CHECK: 'check_scans_last_cloud_check',
     PENDING_SYNC: 'check_scans_pending_sync',
     ZEN_STATION: 'check_scans_zen_station',
-    ZEN_VOLUME: 'check_scans_zen_volume'
+    ZEN_VOLUME: 'check_scans_zen_volume',
+    SORT_ORDER: 'check_scans_sort_order'
 };
 
 const ZEN_STATIONS = {
@@ -61,6 +62,7 @@ const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (ty
 let allItems = {};
 let activeFilter = 'unread';
 let searchQuery = '';
+let currentSort = localStorage.getItem(STORAGE_KEYS.SORT_ORDER) || 'date';
 let isSyncing = false;
 let currentPushSubscription = null;
 
@@ -148,6 +150,23 @@ document.addEventListener('DOMContentLoaded', () => {
         searchQuery = e.target.value.toLowerCase().trim();
         renderItems();
     });
+
+    // Bascule du mode de tri (Par date / Alphabétique)
+    const sortBtn = document.getElementById('sort-toggle-btn');
+    const sortLabel = document.getElementById('sort-label');
+    if (sortBtn) {
+        if (sortLabel) {
+            sortLabel.textContent = currentSort === 'date' ? 'Date' : 'A-Z';
+        }
+        sortBtn.addEventListener('click', () => {
+            currentSort = currentSort === 'date' ? 'alpha' : 'date';
+            localStorage.setItem(STORAGE_KEYS.SORT_ORDER, currentSort);
+            if (sortLabel) {
+                sortLabel.textContent = currentSort === 'date' ? 'Date' : 'A-Z';
+            }
+            renderItems();
+        });
+    }
 
     // Actualisation
     refreshBtn.addEventListener('click', () => {
@@ -449,10 +468,59 @@ function initZenAudioPlayer() {
         if (statusLabel) statusLabel.textContent = 'Chargement...';
     });
 
-    audioElement.addEventListener('error', () => {
-        setUIPlaying(false);
-        if (statusLabel) statusLabel.textContent = 'Erreur réseau';
-    });
+    // Prise en charge Document Picture-in-Picture (Tablettes & Ordinateurs Chromium)
+    const pipBtn = document.getElementById('zen-pip-btn');
+    if (pipBtn && 'documentPictureInPicture' in window) {
+        pipBtn.classList.remove('hidden');
+
+        pipBtn.addEventListener('click', async () => {
+            try {
+                if (window.documentPictureInPicture.window) {
+                    window.documentPictureInPicture.window.close();
+                    return;
+                }
+
+                const pipWin = await window.documentPictureInPicture.requestWindow({
+                    width: 340,
+                    height: 140
+                });
+
+                // Copie des styles CSS de l'application
+                [...document.styleSheets].forEach((sheet) => {
+                    try {
+                        if (sheet.href) {
+                            const link = document.createElement('link');
+                            link.rel = 'stylesheet';
+                            link.href = sheet.href;
+                            pipWin.document.head.appendChild(link);
+                        } else if (sheet.cssRules) {
+                            const style = document.createElement('style');
+                            [...sheet.cssRules].forEach(rule => style.appendChild(document.createTextNode(rule.cssText)));
+                            pipWin.document.head.appendChild(style);
+                        }
+                    } catch (e) {
+                        console.warn('PiP CSS copy:', e);
+                    }
+                });
+
+                const playerContent = panel.querySelector('.zen-player-content');
+                if (playerContent) {
+                    pipWin.document.body.style.margin = '0';
+                    pipWin.document.body.style.background = '#0b1120';
+                    pipWin.document.body.style.display = 'flex';
+                    pipWin.document.body.style.alignItems = 'center';
+                    pipWin.document.body.style.justifyContent = 'center';
+                    pipWin.document.body.appendChild(playerContent);
+
+                    pipWin.addEventListener('pagehide', () => {
+                        panel.insertBefore(playerContent, audioElement);
+                    });
+                }
+            } catch (err) {
+                console.warn('Erreur Document PiP:', err);
+            }
+        });
+    }
 
     if (stationNameEl) stationNameEl.textContent = currentStation.name;
 }
@@ -888,17 +956,30 @@ function renderItems() {
 
     emptyEl.classList.add('hidden');
 
-    // Tri selon l'onglet actif :
-    if (activeFilter === 'unread') {
-        // Dans "À lire" : les séries ayant eu une sortie récente en premier, puis alphabétique
+    // Tri selon le mode actif :
+    if (currentSort === 'date') {
+        // Mode Date : nouveautés prioritaires, puis date de modification la plus récente, puis alphabétique
         filtered.sort((a, b) => {
+            const numUserA = extractEpisodeNumber(a[1].userProgress);
+            const numLatestA = extractEpisodeNumber(a[1].latestState);
+            const hasUpdateA = numLatestA > numUserA;
+
+            const numUserB = extractEpisodeNumber(b[1].userProgress);
+            const numLatestB = extractEpisodeNumber(b[1].latestState);
+            const hasUpdateB = numLatestB > numUserB;
+
+            if (hasUpdateB !== hasUpdateA) {
+                return hasUpdateB ? 1 : -1;
+            }
+
             const timeA = a[1].updatedAt || 0;
             const timeB = b[1].updatedAt || 0;
             if (timeB !== timeA) return timeB - timeA;
+
             return (a[1].title || '').localeCompare(b[1].title || '');
         });
     } else {
-        // Tri alphabétique par titre par défaut
+        // Mode Alphabétique par titre
         filtered.sort((a, b) => (a[1].title || '').localeCompare(b[1].title || ''));
     }
 
@@ -906,6 +987,21 @@ function renderItems() {
         const numUser = extractEpisodeNumber(item.userProgress);
         const numLatest = extractEpisodeNumber(item.latestState);
         const hasUpdate = numLatest > numUser;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'manga-card-wrapper';
+
+        if (hasUpdate) {
+            const actionBg = document.createElement('div');
+            actionBg.className = 'swipe-action-bg';
+            actionBg.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Glisser pour valider lu (${escapeHtml(item.latestState || '')})</span>
+            `;
+            wrapper.appendChild(actionBg);
+        }
 
         const card = document.createElement('article');
         card.className = `manga-card ${hasUpdate ? 'has-update' : ''}`;
@@ -1000,7 +1096,78 @@ function renderItems() {
             });
         }
 
-        gridEl.appendChild(card);
+        // Geste tactile Swipe vers la droite pour valider lu
+        if (hasUpdate) {
+            let startX = 0;
+            let startY = 0;
+            let currentX = 0;
+            let isSwiping = false;
+            let isHorizontal = false;
+            const actionBg = wrapper.querySelector('.swipe-action-bg');
+
+            card.addEventListener('touchstart', (e) => {
+                if (e.touches.length !== 1) return;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                currentX = 0;
+                isSwiping = true;
+                isHorizontal = false;
+                card.classList.add('swiping');
+            }, { passive: true });
+
+            card.addEventListener('touchmove', (e) => {
+                if (!isSwiping || e.touches.length !== 1) return;
+                const diffX = e.touches[0].clientX - startX;
+                const diffY = e.touches[0].clientY - startY;
+
+                if (!isHorizontal) {
+                    if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) {
+                        if (Math.abs(diffX) > Math.abs(diffY) && diffX > 0) {
+                            isHorizontal = true;
+                        } else {
+                            isSwiping = false;
+                            card.classList.remove('swiping');
+                            card.style.transform = '';
+                            if (actionBg) actionBg.classList.remove('visible');
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                }
+
+                if (diffX > 0) {
+                    currentX = diffX;
+                    const visualX = Math.min(diffX, 120) + (diffX > 120 ? Math.pow(diffX - 120, 0.7) : 0);
+                    card.style.transform = `translateX(${visualX}px)`;
+                    if (actionBg) actionBg.classList.toggle('visible', diffX > 35);
+                }
+            }, { passive: true });
+
+            const endSwipe = () => {
+                if (!isSwiping && !isHorizontal) return;
+                isSwiping = false;
+                card.classList.remove('swiping');
+
+                if (isHorizontal && currentX > 85) {
+                    card.classList.add('swiped-out');
+                    setTimeout(() => {
+                        markAsRead(urlKey, item.latestState);
+                    }, 200);
+                } else {
+                    card.style.transform = '';
+                    if (actionBg) actionBg.classList.remove('visible');
+                }
+                isHorizontal = false;
+                currentX = 0;
+            };
+
+            card.addEventListener('touchend', endSwipe);
+            card.addEventListener('touchcancel', endSwipe);
+        }
+
+        wrapper.appendChild(card);
+        gridEl.appendChild(wrapper);
     });
 }
 
