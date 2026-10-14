@@ -60,7 +60,7 @@ const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8up
 const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION);
 
 // État de l'application
-let activeFilter = 'all';
+let activeFilter = 'unread';
 let activeTypeFilter = localStorage.getItem(STORAGE_KEYS.TYPE_FILTER) || 'all';
 let searchQuery = '';
 let currentSort = localStorage.getItem(STORAGE_KEYS.SORT_ORDER) || 'date';
@@ -132,11 +132,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedGistId) gistIdField.value = storedGistId;
     if (storedGistToken) gistTokenField.value = storedGistToken;
 
-    // Initialisation forcée de l'onglet 'all' par défaut
-    activeFilter = 'all';
+    // Initialisation forcée de l'onglet 'unread' par défaut
+    activeFilter = 'unread';
     filterTabs.forEach((tab) => {
-        const isDefaultAll = tab.getAttribute('data-filter') === 'all';
-        tab.classList.toggle('active', isDefaultAll);
+        const isDefaultUnread = tab.getAttribute('data-filter') === 'unread';
+        tab.classList.toggle('active', isDefaultUnread);
 
         tab.addEventListener('click', () => {
             filterTabs.forEach((t) => t.classList.remove('active'));
