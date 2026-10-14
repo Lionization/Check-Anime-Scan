@@ -77,7 +77,7 @@ if ('serviceWorker' in navigator) {
 // Enregistrement et mise à jour du Service Worker
 function registerAppServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('./sw.js').then((reg) => {
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
         reg.update();
         refreshPushStatusUI(reg);
     }).catch((err) => {
