@@ -60,6 +60,7 @@ const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8up
 const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION);
 
 // État de l'application
+let allItems = {};
 let activeFilter = 'all';
 let activeTypeFilter = localStorage.getItem(STORAGE_KEYS.TYPE_FILTER) || 'all';
 let searchQuery = '';
