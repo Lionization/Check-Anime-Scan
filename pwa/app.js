@@ -60,7 +60,7 @@ const VAPID_PUBLIC_KEY = 'BFdc6qHW_0VONqmpkv2Qy6lbV5Tp4U3xdG2gOPCNKaqPfmPbsLK8up
 const CURRENT_VERSION = (typeof self !== 'undefined' && self.APP_VERSION) || (typeof window !== 'undefined' && window.APP_VERSION);
 
 // État de l'application
-let activeFilter = 'unread';
+let activeFilter = 'all';
 let activeTypeFilter = localStorage.getItem(STORAGE_KEYS.TYPE_FILTER) || 'all';
 let searchQuery = '';
 let currentSort = localStorage.getItem(STORAGE_KEYS.SORT_ORDER) || 'date';
@@ -132,11 +132,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedGistId) gistIdField.value = storedGistId;
     if (storedGistToken) gistTokenField.value = storedGistToken;
 
-    // Initialisation forcée de l'onglet 'unread' par défaut
-    activeFilter = 'unread';
+    // Initialisation forcée de l'onglet 'all' par défaut
+    activeFilter = 'all';
     filterTabs.forEach((tab) => {
-        const isDefaultUnread = tab.getAttribute('data-filter') === 'unread';
-        tab.classList.toggle('active', isDefaultUnread);
+        const isDefaultAll = tab.getAttribute('data-filter') === 'all';
+        tab.classList.toggle('active', isDefaultAll);
 
         tab.addEventListener('click', () => {
             filterTabs.forEach((t) => t.classList.remove('active'));
@@ -169,25 +169,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Bascule du format (Tout / Scans / Animes)
-    const typeBtn = document.getElementById('type-toggle-btn');
-    const typeLabel = document.getElementById('type-label');
-    const updateTypeUI = () => {
-        if (!typeLabel) return;
-        if (activeTypeFilter === 'scans') typeLabel.textContent = 'Scans';
-        else if (activeTypeFilter === 'animes') typeLabel.textContent = 'Animes';
-        else typeLabel.textContent = 'Tout';
+    // Gestion du Segmented Switcher de format (Tout / Scans / Animes)
+    const formatBtns = document.querySelectorAll('.format-btn');
+    const updateFormatUI = () => {
+        formatBtns.forEach((btn) => {
+            const btnType = btn.getAttribute('data-type');
+            const isActive = btnType === activeTypeFilter;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-checked', String(isActive));
+        });
     };
-    if (typeBtn) {
-        updateTypeUI();
-        typeBtn.addEventListener('click', () => {
-            if (activeTypeFilter === 'all') activeTypeFilter = 'scans';
-            else if (activeTypeFilter === 'scans') activeTypeFilter = 'animes';
-            else activeTypeFilter = 'all';
-
-            localStorage.setItem(STORAGE_KEYS.TYPE_FILTER, activeTypeFilter);
-            updateTypeUI();
-            renderItems();
+    if (formatBtns.length > 0) {
+        updateFormatUI();
+        formatBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                activeTypeFilter = btn.getAttribute('data-type') || 'all';
+                localStorage.setItem(STORAGE_KEYS.TYPE_FILTER, activeTypeFilter);
+                updateFormatUI();
+                renderItems();
+            });
         });
     }
 
@@ -783,43 +783,47 @@ async function loadDataFromGist(showLoading = false) {
         }
 
         if (fileObj) {
-            let jsonString = fileObj.content;
+            let jsonString = '';
 
-            // Si le fichier est tronqué par l'API GitHub Gist ou si le contenu direct est manquant, on télécharge le raw_url
-            if ((fileObj.truncated || !jsonString) && fileObj.raw_url) {
-                try {
-                    const rawResp = await fetch(fileObj.raw_url, {
-                        headers: gistToken ? { 'Authorization': `Bearer ${gistToken}` } : {}
-                    });
-                    if (rawResp.ok) {
-                        jsonString = await rawResp.text();
+            // Si le fichier est tronqué par GitHub ou sans content direct, on télécharge le flux complet depuis raw_url SANS en-tête d'authentification (CORS-safe)
+            if (fileObj.truncated || !fileObj.content) {
+                if (fileObj.raw_url) {
+                    try {
+                        const rawResp = await fetch(fileObj.raw_url);
+                        if (rawResp.ok) {
+                            jsonString = await rawResp.text();
+                        }
+                    } catch (rawErr) {
+                        console.warn('Erreur lors du téléchargement direct de raw_url:', rawErr);
                     }
-                } catch (rawErr) {
-                    console.warn('Erreur lors du téléchargement du raw_url:', rawErr);
+                }
+            } else {
+                jsonString = fileObj.content;
+            }
+
+            let parsed = null;
+            if (jsonString) {
+                try {
+                    parsed = JSON.parse(jsonString);
+                } catch {
+                    // Si jsonString était tronqué sans flag truncated, tentative de secours via raw_url
+                    console.warn('Échec parsing content direct, tentative via raw_url...');
                 }
             }
 
-            try {
-                let parsed = null;
+            if (!parsed && fileObj.raw_url) {
                 try {
-                    parsed = JSON.parse(jsonString);
-                } catch (firstParseErr) {
-                    // Si le premier parse échoue, tentative de repli ultime via raw_url
-                    if (fileObj.raw_url) {
-                        const rawResp = await fetch(fileObj.raw_url, {
-                            headers: gistToken ? { 'Authorization': `Bearer ${gistToken}` } : {}
-                        });
-                        if (rawResp.ok) {
-                            const freshRaw = await rawResp.text();
-                            parsed = JSON.parse(freshRaw);
-                        } else {
-                            throw firstParseErr;
-                        }
-                    } else {
-                        throw firstParseErr;
+                    const rawResp = await fetch(fileObj.raw_url);
+                    if (rawResp.ok) {
+                        const freshText = await rawResp.text();
+                        parsed = JSON.parse(freshText);
                     }
+                } catch (secoursErr) {
+                    console.error('Échec secours raw_url:', secoursErr);
                 }
+            }
 
+            if (parsed) {
                 allItems = parsed.items || parsed.mangas || parsed || {};
                 localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
                 localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, Date.now().toString());
@@ -831,35 +835,21 @@ async function loadDataFromGist(showLoading = false) {
 
                 if (gistToken && !usedAuth && fetchError && fetchError.message.includes('401')) {
                     setSyncStatus('synced', 'Lecture seule (Token expiré)');
-                    showToast('Données chargées. Attention : Token GitHub expiré, renouvelez-le pour sauvegarder.', true);
+                    showToast('Données chargées en direct. Attention : Token GitHub expiré.', true);
                 } else if (!gistToken) {
                     setSyncStatus('synced', 'Lecture seule');
                 } else {
                     setSyncStatus('synced', 'À l’instant');
                 }
-            } catch (jsonErr) {
-                console.error('Erreur de parsing du Gist:', jsonErr);
-                setSyncStatus('error', 'Format JSON corrompu');
-                showToast('Fichier Gist corrompu ou malformé. Affichage des données en cache local.', true);
-
-                // Préservation du cache local pour éviter une page vide
-                const cached = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
-                if (cached) {
-                    try {
-                        allItems = JSON.parse(cached);
-                    } catch {}
-                }
+            } else {
+                console.error('Impossible de charger le JSON complet distant');
+                setSyncStatus('error', 'Erreur lecture Gist');
+                showToast('Impossible de lire le JSON distant du Gist', true);
             }
         } else {
             console.warn('Fichier suivi.json absent du Gist');
             setSyncStatus('error', 'Fichier suivi.json absent');
             showToast('Le Gist ne contient pas de fichier suivi.json.', true);
-            const cached = localStorage.getItem(STORAGE_KEYS.CACHED_DATA);
-            if (cached) {
-                try {
-                    allItems = JSON.parse(cached);
-                } catch {}
-            }
         }
 
         setViewState('ready');
@@ -1035,6 +1025,28 @@ function renderItems() {
 
     if (filtered.length === 0) {
         emptyEl.classList.remove('hidden');
+        const totalItemsCount = Object.keys(allItems).length;
+        if (activeFilter === 'unread' && totalItemsCount > 0) {
+            emptyEl.innerHTML = `
+                <div class="empty-icon">✓</div>
+                <h3>Toutes vos séries sont à jour</h3>
+                <p>Aucun nouveau chapitre ou épisode à lire pour le moment.</p>
+                <button type="button" class="btn btn-primary btn-empty-action" id="btn-show-all-empty">Voir tout le catalogue (${totalItemsCount})</button>
+            `;
+            const showAllBtn = document.getElementById('btn-show-all-empty');
+            if (showAllBtn) {
+                showAllBtn.addEventListener('click', () => {
+                    activeFilter = 'all';
+                    const filterTabs = document.querySelectorAll('.tab-btn');
+                    filterTabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-filter') === 'all'));
+                    renderItems();
+                });
+            }
+        } else {
+            emptyEl.innerHTML = `
+                <p>Aucun manga ne correspond à ce filtre.</p>
+            `;
+        }
         return;
     }
 
@@ -1090,8 +1102,13 @@ function renderItems() {
             ? `<img src="${sanitizeUrl(item.image)}" alt="${escapeHtml(item.title || 'Manga')}" class="manga-cover" loading="lazy">`
             : `<div class="manga-cover-placeholder">📖</div>`;
 
-        const categoryTag = escapeHtml((item.category || 'SCANS').toUpperCase());
-        const categoryClass = categoryTag === 'ANIMES' ? 'tag-animes' : 'tag-scans';
+        const isAnime = (item.category || '').toUpperCase() === 'ANIMES';
+        const categoryTag = isAnime ? 'ANIMES' : 'SCANS';
+        const categoryClass = isAnime ? 'tag-animes' : 'tag-scans';
+        const categoryIcon = isAnime
+            ? `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/><polygon points="10 11 15 14.5 10 18 10 11" fill="currentColor"/></svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/></svg>`;
+
         const safeTitle = escapeHtml(item.title || 'Sans titre');
         const safeUserProgress = escapeHtml(item.userProgress || 'Non commencé');
         const safeLatestState = escapeHtml(item.latestState || 'Inconnu');
@@ -1112,7 +1129,7 @@ function renderItems() {
                 <div>
                     <div class="manga-header">
                         <h2 class="manga-title">${safeTitle}</h2>
-                        <span class="tag-badge ${categoryClass}">${categoryTag}</span>
+                        <span class="tag-badge ${categoryClass}">${categoryIcon}<span>${categoryTag}</span></span>
                     </div>
 
                     ${hasUpdate ? `<span class="badge-unread">Nouveau disponible</span>` : ''}
