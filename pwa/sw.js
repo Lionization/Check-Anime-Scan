@@ -49,8 +49,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // Ne jamais intercepter les requêtes directes à l'API GitHub ni le streaming audio
-    if (url.hostname.includes('api.github.com') || event.request.destination === 'audio' || url.pathname.endsWith('.mp3')) {
+    // Ne jamais intercepter les requêtes directes à l'API GitHub, les URLs brutes ni le streaming audio
+    if (
+        url.hostname.includes('api.github.com') ||
+        url.hostname.includes('githubusercontent.com') ||
+        url.hostname.includes('github.com') ||
+        event.request.destination === 'audio' ||
+        url.pathname.endsWith('.mp3')
+    ) {
         return;
     }
 

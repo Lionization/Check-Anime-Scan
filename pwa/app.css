@@ -612,6 +612,12 @@ body {
     &:active {
         transform: scale(0.95);
     }
+
+    &.active {
+        background: var(--accent-blue);
+        color: #ffffff;
+        border-color: var(--accent-blue);
+    }
 }
 
 /* ==========================================================================

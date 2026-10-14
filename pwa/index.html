@@ -122,10 +122,15 @@
                 <input type="search" id="search-input" class="search-input" placeholder="Rechercher un manga..." autocomplete="off">
             </div>
             <div class="controls-subbar">
-                <nav class="filter-tabs" aria-label="Filtres de statut">
-                    <button type="button" class="tab-btn active" data-filter="all">Tous</button>
-                    <button type="button" class="tab-btn" data-filter="unread">À lire</button>
-                </nav>
+                <button type="button" id="status-toggle-btn" class="sort-btn" aria-label="Basculer entre Tous et À lire" title="Afficher : Tous ou À lire">
+                    <svg id="status-icon-all" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg id="status-icon-unread" class="hidden" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span id="status-label">Tous</span>
+                </button>
                 <div class="controls-actions">
                     <div class="format-switcher" role="radiogroup" aria-label="Filtrer par format">
                         <button type="button" class="format-btn active" data-type="all" role="radio" aria-checked="true" title="Tous les formats">
