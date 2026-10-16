@@ -11,7 +11,6 @@ const STORAGE_KEYS = {
     LAST_CLOUD_CHECK: 'check_scans_last_cloud_check',
     PENDING_SYNC: 'check_scans_pending_sync',
     ZEN_STATION: 'check_scans_zen_station',
-    ZEN_VOLUME: 'check_scans_zen_volume',
     ZEN_PLAYING: 'check_scans_zen_playing',
     SORT_ORDER: 'check_scans_sort_order',
     TYPE_FILTER: 'check_scans_type_filter'
@@ -311,7 +310,6 @@ function initZenAudioPlayer() {
     const panel = document.getElementById('zen-player-panel');
     const playBtn = document.getElementById('zen-play-btn');
     const stationSelect = document.getElementById('zen-station-select');
-    const volumeRange = document.getElementById('zen-volume-range');
     const closeBtn = document.getElementById('zen-close-panel-btn');
     const audioElement = document.getElementById('zen-audio-element');
     const audioBadge = document.getElementById('zen-audio-badge');
@@ -452,15 +450,6 @@ function initZenAudioPlayer() {
                 if (stationNameEl) stationNameEl.textContent = currentStation.name;
                 startAudio();
             }
-        });
-    }
-
-    // Réglage du volume
-    if (volumeRange) {
-        volumeRange.addEventListener('input', (e) => {
-            const val = parseFloat(e.target.value);
-            audioElement.volume = val;
-            localStorage.setItem(STORAGE_KEYS.ZEN_VOLUME, String(val));
         });
     }
 

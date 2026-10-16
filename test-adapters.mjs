@@ -1,6 +1,9 @@
+import assert from 'node:assert/strict';
+import { execSync } from 'node:child_process';
 import { parseAnimeSama } from './background/adapters/anime-sama.js';
 import { parseWebtoons } from './background/adapters/webtoons.js';
 import { parseMangago } from './background/adapters/mangago.js';
+import { normalizeUrlKey } from './background/gist-sync.js';
 import { 
     decodeHTMLEntities, 
     extractEpisodeNumber, 
@@ -10,9 +13,30 @@ import {
     runWithConcurrency 
 } from './utils.js';
 
-console.log('=== 🧪 SUITE DE TESTS CHECK ANIME & SCANS ===\n');
+console.log('=== 🧪 SUITE DE TESTS COMPLÈTE CHECK ANIME & SCANS ===\n');
 
-// 1. Mock HTML Fixtures
+// -------------------------------------------------------------
+// 1. Contrôle Syntaxique Intégral du Code Source
+// -------------------------------------------------------------
+console.log('1. Contrôle syntaxique du projet (node -c) :');
+const jsFiles = execSync('find . -maxdepth 3 -name "*.js" -not -path "*/node_modules/*" -not -path "*/.git/*"', { encoding: 'utf-8' })
+    .trim()
+    .split('\n')
+    .filter(Boolean);
+
+for (const file of jsFiles) {
+    try {
+        execSync(`node -c "${file}"`);
+    } catch (err) {
+        assert.fail(`Erreur syntaxique détectée dans le fichier: ${file}`);
+    }
+}
+console.log(`   ✓ ${jsFiles.length} fichiers JavaScript validés avec succès (zéro erreur de syntaxe)`);
+
+// -------------------------------------------------------------
+// 2. Tests de l'Adaptateur Anime-Sama
+// -------------------------------------------------------------
+console.log('\n2. Tests Adaptateur Anime-Sama :');
 const animeSamaMock = `
 <!DOCTYPE html>
 <html>
@@ -24,9 +48,21 @@ const animeSamaMock = `
         <option value="3" selected>Épisode 24</option>
     </select>
 </body>
-</html>
-`;
+</html>`;
+const resAnimeNominal = parseAnimeSama(animeSamaMock);
+assert.strictEqual(typeof resAnimeNominal === 'object' ? resAnimeNominal.text : resAnimeNominal, 'Épisode 24', 'Doit extraire l\'épisode sélectionné');
+assert.strictEqual(resAnimeNominal.image, 'https://anime-sama.fr/images/cover.jpg', 'Doit extraire la cover og:image');
 
+// Cas dégradé : HTML sans options sélectionnées -> Fallback d'empreinte
+const resAnimeEmpty = parseAnimeSama('<html><body><p>Texte sans épisode</p></body></html>');
+assert.ok(typeof resAnimeEmpty === 'string' && resAnimeEmpty.startsWith('Longueur/Etat HTML:'), 'Doit générer un fallback d\'empreinte');
+assert.strictEqual(parseAnimeSama(null), null);
+console.log('   ✓ Cas nominal, fallback d\'empreinte et résilience validés');
+
+// -------------------------------------------------------------
+// 3. Tests de l'Adaptateur Webtoons
+// -------------------------------------------------------------
+console.log('\n3. Tests Adaptateur Webtoons :');
 const webtoonsMock = `
 <!DOCTYPE html>
 <html>
@@ -38,9 +74,19 @@ const webtoonsMock = `
         </li>
     </ul>
 </body>
-</html>
-`;
+</html>`;
+const resWebtoonNominal = parseWebtoons(webtoonsMock);
+assert.strictEqual(resWebtoonNominal.text, 'Saison 2 Épisode 45 |#145|', 'Doit tagger data-episode-no');
+assert.strictEqual(resWebtoonNominal.image, 'https://webtoons.com/cover.jpg');
 
+const resWebtoonEmpty = parseWebtoons('<html><body></body></html>');
+assert.strictEqual(resWebtoonEmpty, null, 'Doit retourner null si aucun épisode');
+console.log('   ✓ Extraction du numéro d\'épisode et tag masqué validés');
+
+// -------------------------------------------------------------
+// 4. Tests de l'Adaptateur Mangago
+// -------------------------------------------------------------
+console.log('\n4. Tests Adaptateur Mangago :');
 const mangagoMock = `
 <!DOCTYPE html>
 <html>
@@ -51,36 +97,154 @@ const mangagoMock = `
         <tr><td><a class="chico" href="#">Ch. 1109</a></td></tr>
     </table>
 </body>
-</html>
-`;
+</html>`;
+const resMangagoNominal = parseMangago(mangagoMock);
+assert.strictEqual(resMangagoNominal.text, 'Chapitre 1110', 'Doit formater Ch. en Chapitre');
+assert.strictEqual(resMangagoNominal.image, 'https://mangago.me/cover.jpg');
 
-console.log('1. Test Adaptateur Anime-Sama:');
-const animeResult = parseAnimeSama(animeSamaMock);
-console.log('   Résultat:', animeResult);
+const resMangagoEmpty = parseMangago('<html><body></body></html>');
+assert.strictEqual(resMangagoEmpty, null, 'Doit retourner null si aucun chapitre');
+console.log('   ✓ Normalisation de chapitre, cover et absence de résultat validées');
 
-console.log('\n2. Test Adaptateur Webtoons:');
-const webtoonResult = parseWebtoons(webtoonsMock);
-console.log('   Résultat:', webtoonResult);
+// -------------------------------------------------------------
+// 5. Tests Utilitaires : Décodage Entités & Nettoyage de Titre
+// -------------------------------------------------------------
+console.log('\n5. Tests Décodage & Nettoyage de Titre :');
+assert.strictEqual(decodeHTMLEntities('&amp;rsquo;'), '’', 'Doit supporter le double échappement HTML');
+assert.strictEqual(decodeHTMLEntities('&eacute;&amp;&quot;'), 'é&"', 'Doit décoder accents et guillemets');
+assert.strictEqual(decodeHTMLEntities(''), '');
+assert.strictEqual(decodeHTMLEntities(null), '');
 
-console.log('\n3. Test Adaptateur Mangago:');
-const mangagoResult = parseMangago(mangagoMock);
-console.log('   Résultat:', mangagoResult);
+assert.strictEqual(cleanTitle('Solo Leveling | Scan VF'), 'Solo Leveling', 'Doit retirer le pipe et le suffixe');
+assert.strictEqual(cleanTitle('One Piece &amp; Cie | Manga'), 'One Piece & Cie', 'Doit décoder et nettoyer');
+assert.strictEqual(cleanTitle(null), '');
+console.log('   ✓ Décodage HTML et assainissement de titre validés');
 
-// 2. Tests des Utilitaires utils.js
-console.log('\n4. Tests Utilitaires utils.js:');
-console.log('   decodeHTMLEntities("&amp;rsquo; / &quot;Test&quot;"):', decodeHTMLEntities('&amp;rsquo; / &quot;Test&quot;'));
-console.log('   cleanTitle("Solo Leveling | Scan VF"):', cleanTitle('Solo Leveling | Scan VF'));
-console.log('   extractEpisodeNumber("Épisode 24 |#24.5|"):', extractEpisodeNumber('Épisode 24 |#24.5|'));
-console.log('   cleanStateDisplay("Épisode 24 |#24|"):', cleanStateDisplay('Épisode 24 |#24|'));
-console.log('   formatRelativeTime(now - 15min):', formatRelativeTime(Date.now() - 15 * 60 * 1000));
-console.log('   formatRelativeTime(now - 3h):', formatRelativeTime(Date.now() - 3 * 3600 * 1000));
+// -------------------------------------------------------------
+// 6. Tests Utilitaires : Extraction de Numéros de Chapitres & Tags
+// -------------------------------------------------------------
+console.log('\n6. Tests Extraction Numérique & Nettoyage Statut :');
+// Nombres simples
+assert.strictEqual(extractEpisodeNumber('Chapitre 105'), 105);
+// Décimaux (ex: chapitres .5)
+assert.strictEqual(extractEpisodeNumber('Chapitre 105.5'), 105.5);
+// Format tagué masqué prioritaire
+assert.strictEqual(extractEpisodeNumber('Saison 2 Épisode 45 |#145|'), 145);
+assert.strictEqual(extractEpisodeNumber('Épisode 24 |#24.5|'), 24.5);
+// Cas limites
+assert.strictEqual(extractEpisodeNumber('Sans numéro'), 0);
+assert.strictEqual(extractEpisodeNumber(null), 0);
+assert.strictEqual(extractEpisodeNumber(''), 0);
 
-// 3. Test de Concurrence
-console.log('\n5. Test Exécution Concurrente runWithConcurrency:');
-const dummyItems = [1, 2, 3, 4, 5, 6, 7, 8];
-const concurrentResults = await runWithConcurrency(dummyItems, 3, async (item) => {
-    return `Processed ${item}`;
+// Nettoyage de l'affichage
+assert.strictEqual(cleanStateDisplay('Saison 2 Épisode 45 |#145|'), 'Saison 2 Épisode 45');
+assert.strictEqual(cleanStateDisplay('Chapitre 12'), 'Chapitre 12');
+assert.strictEqual(cleanStateDisplay(null), 'État inconnu');
+console.log('   ✓ Extraction de décimaux, entiers et tags masqués validée');
+
+// -------------------------------------------------------------
+// 7. Tests Logique Métier : Détection Lu / Non Lu (isItemUnread)
+// -------------------------------------------------------------
+console.log('\n7. Tests Détection de Non Lu (Règle Métier Anti-Régression) :');
+/**
+ * Règle canonique de détection unread conforme à pwa/app.js
+ */
+function isItemUnread(item) {
+    if (!item || !item.latestEpisode) return false;
+    if (item.isNew === false) return false;
+
+    const numUser = extractEpisodeNumber(item.userProgress || '');
+    const numLatest = extractEpisodeNumber(item.latestEpisode || '');
+
+    if (numUser > 0 && numLatest > 0) {
+        return numUser < numLatest;
+    }
+    return Boolean(item.isNew);
+}
+
+// Cas 1 : L'utilisateur est à jour numériquement -> DOIT être lu
+assert.strictEqual(isItemUnread({
+    userProgress: 'Chapitre 105',
+    latestEpisode: 'Chapitre 105',
+    isNew: true
+}), false, 'Si userProgress === latestEpisode numériquement, ne doit PAS être non lu');
+
+// Cas 2 : L'utilisateur est en avance ou égal malgré un sous-titre différent
+assert.strictEqual(isItemUnread({
+    userProgress: 'Chapitre 105',
+    latestEpisode: 'Chapitre 105 : Fin du combat',
+    isNew: true
+}), false, 'Même numéro avec sous-titre doit être considéré lu');
+
+// Cas 3 : L'utilisateur est en retard -> DOIT être non lu
+assert.strictEqual(isItemUnread({
+    userProgress: 'Chapitre 104',
+    latestEpisode: 'Chapitre 105',
+    isNew: true
+}), true, 'Si userProgress < latestEpisode, doit être non lu');
+
+// Cas 4 : isNew explicite à false (lecture validée manuellement)
+assert.strictEqual(isItemUnread({
+    userProgress: 'Chapitre 100',
+    latestEpisode: 'Chapitre 105',
+    isNew: false
+}), false, 'Si isNew === false, doit être lu');
+console.log('   ✓ Comparaison numérique et cas limites lu/non-lu validés');
+
+// -------------------------------------------------------------
+// 8. Tests Normalisation des Clés d'URL
+// -------------------------------------------------------------
+console.log('\n8. Tests Normalisation des Clés Gist (normalizeUrlKey) :');
+assert.strictEqual(
+    normalizeUrlKey('https://anime-sama.fr/catalogue/solo-leveling/'),
+    'https://anime-sama.fr/catalogue/solo-leveling',
+    'Doit supprimer le trailing slash'
+);
+assert.strictEqual(
+    normalizeUrlKey('https://webtoons.com/fr/action/tower-of-god/viewer?title_no=123'),
+    'https://webtoons.com/fr/action/tower-of-god/viewer',
+    'Doit conserver le pathname propre sans trailing slash'
+);
+assert.strictEqual(normalizeUrlKey(''), '');
+assert.strictEqual(normalizeUrlKey(null), '');
+console.log('   ✓ Normalisation des clés d\'accès validée');
+
+// -------------------------------------------------------------
+// 9. Tests Formatage du Temps Relatif
+// -------------------------------------------------------------
+console.log('\n9. Tests Formatage du Temps Relatif :');
+const now = Date.now();
+assert.strictEqual(formatRelativeTime(now - 30 * 1000), "À l'instant");
+assert.strictEqual(formatRelativeTime(now - 15 * 60 * 1000), 'Il y a 15 min');
+assert.strictEqual(formatRelativeTime(now - 3 * 3600 * 1000), 'Il y a 3h');
+assert.strictEqual(formatRelativeTime(now - 25 * 3600 * 1000), 'Hier');
+assert.strictEqual(formatRelativeTime(now - 3 * 86400 * 1000), 'Il y a 3j');
+assert.strictEqual(formatRelativeTime(null), '');
+console.log('   ✓ Échelons temporels relatifs en français validés');
+
+// -------------------------------------------------------------
+// 10. Tests Exécution Concurrente et Tolérance aux Pannes
+// -------------------------------------------------------------
+console.log('\n10. Tests Exécution Concurrente (runWithConcurrency) :');
+const itemsToProcess = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let activeConcurrency = 0;
+let maxObservedConcurrency = 0;
+
+const concurrentResults = await runWithConcurrency(itemsToProcess, 3, async (item) => {
+    activeConcurrency++;
+    if (activeConcurrency > maxObservedConcurrency) {
+        maxObservedConcurrency = activeConcurrency;
+    }
+    await new Promise(r => setTimeout(r, 10));
+    activeConcurrency--;
+    if (item === 5) throw new Error('Erreur réseau simulée');
+    return `OK-${item}`;
 });
-console.log('   Éléments traités en parallèle:', concurrentResults.length === 8 ? 'OK (8/8)' : 'Échec');
 
-console.log('\n=== ✅ TOUS LES TESTS SONT PASSÉS AVEC SUCCÈS ===');
+assert.strictEqual(concurrentResults.length, 10, 'Tous les éléments doivent être représentés');
+assert.strictEqual(concurrentResults[4], null, 'L\'élément en erreur doit retourner null sans faire crasher la boucle');
+assert.strictEqual(concurrentResults[0], 'OK-1');
+assert.ok(maxObservedConcurrency <= 3, `La concurrence observée (${maxObservedConcurrency}) ne doit pas dépasser le plafond (3)`);
+console.log('   ✓ Limitation stricte de concurrence et résilience aux erreurs validées');
+
+console.log('\n=== ✅ TOUS LES TESTS STRICTS SONT PASSÉS SANS ERREUR (10/10) ===');

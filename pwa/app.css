@@ -403,24 +403,6 @@ body {
     }
 }
 
-.zen-volume-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-secondary);
-}
-
-.zen-volume-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-}
-
-.zen-volume-slider {
-    width: 52px;
-    accent-color: var(--accent-blue);
-    cursor: pointer;
-}
 
 .zen-btn-pip {
     margin-left: auto;
