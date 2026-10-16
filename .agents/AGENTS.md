@@ -1,137 +1,116 @@
 # Règles de l'Agent - Projet Check Anime & Scans
 
-Ce document constitue la source unique de vérité pour le projet `check-anime-scan`. Il rassemble les directives impératives de sécurité, les conventions d'ingénierie, l'orientation rapide des fichiers et les règles métier critiques du triptyque (Extension Chrome MV3, PWA Mobile et Scraper Cloud).
+Ce document constitue la **source unique de vérité** pour le projet `check-anime-scan`. Il est conçu pour donner à tout agent IA un **modèle mental immédiat et sans ambiguïté** dès la première lecture, afin de résoudre les tâches chirurgicalement et d'économiser un maximum de tokens.
 
 ---
 
-## 1. Rôle & Cadrage Général
+## 0. Modèle Mental en 10 Secondes (TL;DR)
 
-- **Expertise** : Ingénieur logiciel senior spécialisé en **JavaScript Vanilla (ES6+)**, **HTML5 sémantique**, **CSS3 moderne**, **Service Workers** et **Chrome Extensions Manifest V3**.
-- **Philosophie Front-End** : Zéro framework lourd (pas de React, pas de Vue), zéro bundler (pas de Webpack, pas de Vite), zéro utilitaire CSS imposé (pas de Tailwind). Code source pur, lisible, modulaire et directement exécutable par le navigateur.
-- **Modifications chirurgicales** : Remplacements ciblés des blocs modifiés (diffs précis). Ne jamais régénérer un fichier complet sauf demande expresse.
-- **Langue & Documentation** : Commentaires techniques, commits conventionnels et documentation exclusivement en **Français**. Code auto-porteur privilégié (*self-documenting code*).
-- **Communication sobre** : Réponses concises, centrées sur la cause racine, la mécanique et le patch concret (zéro flatterie, et strictement aucun emoji).
-
----
-
-## 2. Règles Strictes (Lignes Rouges)
-
-Il est formellement interdit de déroger aux règles suivantes :
-
-1. **Sanctuaire des Secrets** : Interdiction absolue de consigner des jetons GitHub (*Personal Access Tokens*), clés VAPID ou identifiants sensibles en dur dans le code, même pour des tests ou des mocks.
-2. **Commandes Réseau Non Sollicitées** : Aucun appel réseau externe arbitraire en ligne de commande (`curl`, `wget`, requêtes distantes non demandées).
-3. **Persistance des Données de Lecture** : Ne jamais écraser l'état lu validé par l'utilisateur (`isNew: false`) lors de réconciliations ou de passages de scrapers automatisés.
-4. **Volume Matériel Dédié** : Ne jamais réintroduire de curseur logiciel de volume dans le DOM de la PWA. Le volume logiciel de l'élément `<audio>` reste verrouillé à `1.0` pour déléguer la dynamique au mixeur physique du smartphone.
-5. **Gestion du Rechargement de Page** : Ne jamais appeler `window.location.reload()` lors du rafraîchissement des mangas/animes (swipe vers le bas). Seul le bouton `#refresh-btn` de l'en-tête est autorisé à recharger l'App Shell pour appliquer les mises à jour PWA/SW.
+- **Objectif du projet** : Suivre automatiquement les sorties d'animes et de chapitres de scans sans dépendre d'un serveur applicatif lourd.
+- **Le Pivot Central** : Un fichier JSON unique `suivi.json` stocké sur un **GitHub Gist secret**.
+- **Qui écrit quoi ?** :
+  - **L'Extension Chrome (PC)** et le **Scraper Cloud (GitHub Actions)** scannent le Web et renseignent `latestEpisode` et `isNew: true`.
+  - **La PWA Mobile** permet à l'utilisateur de lire, cliquer sur `+1` ou `Valider lu`, mettant à jour `userProgress` et forçant `isNew: false`.
+- **Règle d'or** : Jamais de comparaison textuelle sur les chapitres. Toujours une extraction numérique (`extractEpisodeNumber`).
 
 ---
 
-## 3. Architecture Triptyque & Flux de Données
+## 1. Schéma Canonique des Données (`suivi.json`)
 
-Le projet fonctionne sans serveur applicatif central (*serverless*), interconnecté via un **Gist GitHub secret (`suivi.json`)** :
+Toutes les briques du projet partagent ce format de données strict, indexé par l'URL normalisée (`normalizeUrlKey`) :
 
-```text
-[Extension Chrome MV3]  <--- (PATCH / GET Gist) --->  [GitHub Gist : suivi.json]
-                                                             ^
-                                                             | (GET public / PATCH token)
-[PWA Mobile Tactile]   <------------------------------------+
-                                                             |
-[Scraper Cloud GitHub Actions] --- (Cron 3h / Web Push) -----+
+```json
+{
+  "https://anime-sama.fr/catalogue/solo-leveling": {
+    "url": "https://anime-sama.fr/catalogue/solo-leveling",
+    "title": "Solo Leveling",
+    "latestEpisode": "Épisode 24",
+    "userProgress": "Épisode 23",
+    "isNew": true,
+    "lastChecked": 1729123456789,
+    "category": "ANIMES",
+    "image": "https://anime-sama.fr/images/cover.jpg"
+  }
+}
 ```
 
-1. **Extension Chrome Desktop (MV3)** : Scanne les dossiers de favoris du navigateur (`ANIMES`, `SCANS`), détecte les nouveaux épisodes/chapitres et met à jour le Gist.
-2. **PWA Mobile Tactile (`pwa/`)** : Client autonome installable (smartphone et desktop), lecture hors-ligne, lecteur d'ambiance zen 24/7, boutons d'action rapide (+1, Lu).
-3. **Scraper Cloud Autonome (`scripts/cloud-scraper.mjs`)** : Exécuté toutes les 3 heures via GitHub Actions (`.github/workflows/check-scans.yml`) pour vérifier les sorties quand les terminaux sont fermés et expédier les notifications Web Push.
+- Si `extractEpisodeNumber(userProgress) >= extractEpisodeNumber(latestEpisode)` ➔ L'élément est **lu** (`isItemUnread = false`).
+- Si `extractEpisodeNumber(userProgress) < extractEpisodeNumber(latestEpisode)` ET `isNew !== false` ➔ L'élément est **non lu** (`isItemUnread = true`).
 
 ---
 
-## 4. Carte d'Orientation Rapide des Fichiers (« Où chercher ? »)
+## 2. Table d'Orientation Immédiate (« Si la demande concerne X ➔ Aller dans Y »)
 
-| Périmètre | Emplacement | Rôle, Logique & Composants |
+| Intention ou Problème Signalé | Fichier(s) à Ouvrir | Fonctions ou Sélecteurs Clés |
 | :--- | :--- | :--- |
-| **PWA - Structure** | `pwa/index.html` | Gabarit HTML5 sémantique, modales `<dialog>`, lecteur audio zen, conteneur de liste. |
-| **PWA - Styles** | `pwa/app.css` | Thème sombre Vanilla, variables `:root`, animations fluides (`.read-out`, `.rotating`), responsive tactile. |
-| **PWA - Logique Client** | `pwa/app.js` | File d'attente Gist debouncée (450ms), historique popstate, lecteur radio HTML5 et background sync. |
-| **PWA - Versioning** | `pwa/version.js` | Source unique de vérité `self.APP_VERSION` partagée entre l'interface et le Service Worker. |
-| **PWA - Service Worker** | `pwa/sw.js` | Stratégie Network-First sur l'App Shell, bypass des flux audio et de GitHub API, cache versionné. |
-| **Extension - Manifest** | `manifest.json` | Déclaration Manifest V3, permissions (`alarms`, `bookmarks`, `storage`, `notifications`). |
-| **Extension - Tâche de Fond** | `background/service-worker.js` | Gestionnaire d'alarmes périodiques de l'extension Chrome et calcul du badge numérique. |
-| **Extension - Synchronisation** | `background/gist-sync.js` | Réconciliation bidirectionnelle Gist ↔ local, normalisation d'URL (`normalizeUrlKey`). |
-| **Extension - Scrapers** | `background/adapters/` | Modules d'extraction DOM : `anime-sama.js`, `webtoons.js`, `mangago.js`. |
-| **Extension - Popup** | `popup/` | Interface popup de l'extension Chrome (`popup.html`, `popup.css`, `popup.js`). |
-| **Extension - Options** | `options/` | Page des réglages de l'extension (`options.html`, `options.js`). |
-| **Utilitaires Partagés** | `utils.js` | Fonctions pures : `extractEpisodeNumber`, `cleanTitle`, `cleanStateDisplay`, `decodeHTMLEntities`, `runWithConcurrency`. |
-| **Scraper Cloud** | `scripts/cloud-scraper.mjs` | Script Node.js autonome exécuté en runner GitHub Actions avec envoi Web Push (`web-push`). |
-| **Automatisation CI** | `.github/workflows/check-scans.yml` | Workflow GitHub Actions déclenché toutes les 3 heures via cron. |
-| **Tests & QA** | `test-adapters.mjs` | Suite complète de validation avec assertions strictes (`npm test`). |
+| **Bouton +1, Marquage lu, Tri, Filtres PWA** | `pwa/app.js` | `markAsRead()`, `isItemUnread()`, `renderItems()`, `updateStatusUI()` |
+| **Geste Swipe vers le bas (Pull-to-Refresh)** | `pwa/app.js` | `initPullToRefresh()` (déclenche `loadDataFromGist(true)` sans reload) |
+| **Lecteur Radio Zen (musique d'ambiance 24/7)** | `pwa/app.js`, `pwa/index.html` | Constante `ZEN_STATIONS`, fonction `initZenAudioPlayer()`, `audioElement` |
+| **Design, Thème sombre, Animations PWA** | `pwa/app.css` | `.zen-player`, `.read-out`, `.icon-btn.rotating`, variables `:root` |
+| **Version PWA, Cache ou Problème Service Worker** | `pwa/version.js`, `pwa/sw.js` | `self.APP_VERSION`, cache `APP_SHELL`, événements `install`/`activate` |
+| **Bouton d'actualisation de l'application PWA** | `pwa/app.js`, `pwa/index.html` | `#refresh-btn` (déclenche `reg.update()` et `window.location.reload()`) |
+| **Synchronisation Gist & File d'attente mobile** | `pwa/app.js` | `scheduleSaveItemsToGist()` (debounce 450ms), `executeSaveItemsToGist()` |
+| **Ajout/Correction d'un scraper de site manga/anime**| `background/adapters/` | `anime-sama.js`, `webtoons.js`, `mangago.js` |
+| **Synchronisation Gist côté Extension Chrome** | `background/gist-sync.js` | `syncStorageWithGist()`, `normalizeUrlKey()`, `reconcileGistData()` |
+| **Tâche de fond Extension Chrome (alarmes)** | `background/service-worker.js`| Événement `chrome.alarms.onAlarm`, `updateBadgeCount()` |
+| **Scraper Cloud programmé (GitHub Actions)** | `scripts/cloud-scraper.mjs` | `checkAllBookmarks()`, `sendWebPush()`, `.github/workflows/check-scans.yml` |
+| **Utilitaires communs (nombres, titres, dates)** | `utils.js` | `extractEpisodeNumber()`, `cleanTitle()`, `cleanStateDisplay()`, `formatRelativeTime()` |
+| **Tests & Validation de non-régression** | `test-adapters.mjs` | `npm test` (10 assertions strictes `node:assert/strict`) |
 
 ---
 
-## 5. Règles Métier & Anti-Pièges Critiques
+## 3. Matrice « CE QU'IL FAUT FAIRE » vs « CE QU'IL NE FAUT PAS FAIRE » (DO vs DON'T)
 
-### 1. Comparaison Numérique des Chapitres (`isItemUnread`)
-- **Règle absolue** : La détection d'un nouvel épisode ou chapitre repose exclusivement sur la comparaison numérique issue de `extractEpisodeNumber()` :
-  ```js
-  const numUser = extractEpisodeNumber(item.userProgress || '');
-  const numLatest = extractEpisodeNumber(item.latestEpisode || '');
-  if (numUser > 0 && numLatest > 0) {
-      return numUser < numLatest; // Lu dès que numUser >= numLatest
-  }
-  ```
-- **Anti-piège** : Ne jamais comparer l'égalité stricte des chaînes textuelles. Les sites modifient fréquemment les sous-titres (ex: *« Chapitre 105 »* devient *« Chapitre 105 : Conclusion »*), ce qui engendrait des faux positifs non lus.
-
-### 2. Synchronisation Gist : File d'Attente & Debounce
-- Dans `pwa/app.js`, tout enregistrement vers GitHub Gist doit transiter par `scheduleSaveItemsToGist()` (debounce de 450ms).
-- Cela garantit la coalescence des actions rapides (clics successifs sur +1 ou marquages en série) et neutralise les conflits HTTP 409/422 côté GitHub.
-
-### 3. Lecteur Radio Zen & Flux sans Publicité
-- Les flux configurés dans `ZEN_STATIONS` sont strictement associatifs et sans publicité commerciale :
-  - `anime_ost` : Stereo Anime (OST d'animes & jeux vidéo).
-  - `plaza` : Nightwave Plaza (Tokyo City Pop & Vaporwave).
-- **Reconnexion automatique** : Écouteur `window.addEventListener('online')` pour relancer silencieusement le stream après passage en zone blanche ou tunnel.
-- **MediaSession** : Intégration systématique des métadonnées et handlers sur `navigator.mediaSession` pour l'affichage écran de verrouillage / centre de contrôle.
-
-### 4. Navigation & Historique Mobile (Popstate)
-- Sur mobile Android, l'ouverture d'une modale (`<dialog>`) empile un état dans l'historique (`history.pushState`).
-- L'appui sur le bouton retour matériel ou le geste tactile de glissement ferme la modale sans quitter l'application.
+| Domaine | ❌ CE QU'IL NE FAUT PAS FAIRE (Anti-Patterns) | ✅ CE QU'IL FAUT FAIRE (Bonnes Pratiques) |
+| :--- | :--- | :--- |
+| **Détection Lu/Non lu** | Comparer les chaînes textuelles : `userProgress === latestEpisode` (échoue si un site ajoute *: Fin du combat*). | Comparer numériquement : `extractEpisodeNumber(userProgress) >= extractEpisodeNumber(latestEpisode)`. |
+| **Rafraîchissement Scans**| Appeler `window.location.reload()` lors du swipe vers le bas (coupe brutalement la radio en cours). | Appeler `loadDataFromGist(true)` qui met à jour le DOM sans recharger la page. |
+| **Volume Audio** | Ajouter un curseur `<input type="range">` dans le DOM (inopérant sur OS mobile). | Fixer `audioElement.volume = 1.0` et déléguer intégralement aux touches physiques du téléphone. |
+| **Écriture Gist** | Lancer des requêtes PATCH directes à chaque clic (provoque des erreurs HTTP 409/422). | Passer par `scheduleSaveItemsToGist()` qui debounce à 450ms et fusionne les actions rapides. |
+| **Frameworks & Build** | Introduire du React, Vue, Tailwind ou un bundler (Vite, Webpack). | Écrire exclusivement du JavaScript Vanilla (ES6+), HTML5 et CSS3 pur non minifié. |
+| **Communication** | Utiliser des emojis, des flatteries ou paraphraser les demandes. | Réponses sobres, techniques, chirurgicales et en français sans aucun emoji. |
 
 ---
 
-## 6. PWA, Service Worker & Stratégie de Cache
+## 4. Règles Strictes d'Ingénierie (Lignes Rouges)
 
-- **Mise à jour du code PWA** : Le fichier `pwa/version.js` est la source de vérité (`self.APP_VERSION`). Lors d'une montée de version, le Service Worker s'installe en tâche de fond (`skipWaiting`), purge les anciens caches dans l'événement `activate`, et prend le contrôle via `clients.claim()`.
-- **Bypass de cache impératif** : Le Service Worker dans `pwa/sw.js` ne doit **jamais** intercepter ni mettre en cache :
-  - Les flux de streaming audio (`.mp3` ou `destination === 'audio'`).
-  - Les requêtes directes à l'API GitHub (`api.github.com`).
-- **Distinction des actualisations** :
-  - *Swipe vers le bas (Pull-to-Refresh)* : Déclenché par `initPullToRefresh()`, appelle `loadDataFromGist(true)` pour rafraîchir les données de lecture sans recharger la page et sans couper la radio.
-  - *Bouton d'en-tête (`#refresh-btn`)* : Dédié à la mise à jour de la PWA, appelle `reg.update()` et recharge l'application (`window.location.reload()`).
+1. **Zéro Secret en Dur** : Ne jamais écrire de tokens GitHub, identifiants ou clés privées VAPID dans le code source.
+2. **Aucun Appel Réseau Arbitraire** : Ne pas lancer de requêtes réseau en ligne de commande (`curl`, `wget`) sans demande explicite.
+3. **Priorité à l'Action Utilisateur** : Si un manga a été marqué lu sur mobile (`isNew: false`), aucun scraper automatique ne doit réécraser `isNew: true`.
+4. **Flux Radio 100% Sans Pub** : Ne référencer que des stations communautaires sans publicité (`anime_ost`: Stereo Anime, `plaza`: Nightwave Plaza).
+5. **Modifications Chirurgicales** : Toujours privilégier `replace_file_content` sur des blocs précis plutôt que de réécrire des fichiers entiers.
 
 ---
 
-## 7. Macro / Déclencheur d'Audit & Contrôle de Bout en Bout
+## 5. Détails Spécifiques PWA & Service Worker
 
-Dès que l'utilisateur soumet l'une des expressions suivantes :
-- `audit`, `/audit`, `vérifie`, `check`, `contrôle`, ou toute demande de vérification de bout en bout ;
+- **Source de Vérité de Version** : Le numéro de version réside exclusivement dans `pwa/version.js` (`self.APP_VERSION`).
+  - `pwa/index.html` l'affiche dans le badge `#app-version-badge`.
+  - `pwa/sw.js` l'utilise pour nommer son cache : `check-scans-v${self.APP_VERSION}`.
+  - Pour déployer une mise à jour, incrémenter uniquement `self.APP_VERSION` dans `pwa/version.js`.
+- **Règle de Cache PWA (`pwa/sw.js`)** :
+  - **App Shell mis en cache** : `./`, `index.html`, `app.css`, `app.js`, `version.js`, `manifest.json`, icônes.
+  - **Bypass absolu** : Toute requête vers l'API GitHub (`api.github.com`) ou le streaming audio (`.mp3` ou `destination === 'audio'`) doit traverser directement vers le réseau sans passer par le cache.
+- **Navigation Tactile Android** : Les modales `<dialog>` s'ouvrent via `openModalWithHistory(dialog)` qui injecte un état `history.pushState`. Le geste retour Android ferme naturellement la modale via l'écouteur `popstate`.
 
-L'agent applique **immédiatement et automatiquement** le protocole d'audit complet suivant sans demander confirmation :
+---
 
-1. **Contrôle Syntaxique Exhaustif** :
-   ```bash
-   for f in $(find . -maxdepth 3 -name "*.js" -not -path "*/node_modules/*" -not -path "*/.git/*"); do node -c "$f" || exit 1; done
-   ```
-2. **Suite de Tests d'Intégration Stricte** :
-   ```bash
-   npm test
-   ```
-   Exécute les 10 domaines de tests avec assertions strictes (`node:assert/strict`) :
-   - Syntaxe globale du projet.
-   - Cas nominaux et dégradés des adaptateurs Anime-Sama, Webtoons et Mangago.
-   - Décodage des entités HTML doubles et nettoyage des titres.
-   - Extraction numérique des décimaux et balises masquées.
-   - Règle métier Lu / Non Lu anti-régression.
-   - Normalisation des clés d'URL Gist.
-   - Formatage des temps relatifs en français.
-   - Gestion de la concurrence et résilience aux pannes réseau (`runWithConcurrency`).
-3. **Purge du Code Mort** : Traque systématique des variables locales orphelines, clés de stockage inutilisées, classes CSS abandonnées et fonctions dupliquées.
-4. **Restitution Sobre** : Présentation directe du bilan technique et des correctifs appliqués, sans aucun emoji.
+## 6. Protocole de Validation QA Obligatoire
+
+Avant de considérer une modification comme achevée, exécuter impérativement la commande suivante à la racine :
+
+```bash
+npm test
+```
+
+Cette commande exécute automatiquement :
+1. Le contrôle syntaxique de l'ensemble des 14 fichiers `.js` via `node -c`.
+2. Les tests des 3 adaptateurs de scraping (`anime-sama`, `webtoons`, `mangago`) en cas nominaux et dégradés.
+3. La validation du décodage d'entités HTML et assainissement des titres.
+4. L'extraction précise des numéros d'épisodes et chapitres (entiers, décimaux `.5` et tags masqués `|#145|`).
+5. La conformité de la règle métier Lu / Non Lu anti-régression (`isItemUnread`).
+6. La normalisation des clés d'URL Gist (`normalizeUrlKey`).
+7. Le formatage temporel relatif en français (`formatRelativeTime`).
+8. La limitation de concurrence et la résilience aux erreurs asynchrones (`runWithConcurrency`).
+
+Critère d'acceptation : **Code retour 0 et 10/10 tests validés.**
