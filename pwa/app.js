@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
     PENDING_SYNC: 'check_scans_pending_sync',
     ZEN_STATION: 'check_scans_zen_station',
     ZEN_VOLUME: 'check_scans_zen_volume',
+    ZEN_PLAYING: 'check_scans_zen_playing',
     SORT_ORDER: 'check_scans_sort_order',
     TYPE_FILTER: 'check_scans_type_filter'
 };
@@ -340,16 +341,13 @@ function initZenAudioPlayer() {
     if (!savedStationId || savedStationId === 'koto' || savedStationId === 'eastern' || !ZEN_STATIONS[savedStationId]) {
         savedStationId = 'lofi';
     }
-    const savedVolume = parseFloat(localStorage.getItem(STORAGE_KEYS.ZEN_VOLUME) || '0.7');
+    // Volume de base à 1.0 (100%) pour laisser le contrôle intégral au mixeur matériel du téléphone
+    audioElement.volume = 1.0;
 
     let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.lofi;
     if (stationSelect) {
         stationSelect.value = currentStation.id;
     }
-    if (volumeRange) {
-        volumeRange.value = savedVolume;
-    }
-    audioElement.volume = isNaN(savedVolume) ? 0.7 : Math.max(0, Math.min(1, savedVolume));
 
     const switchStation = (direction) => {
         const stationKeys = Object.keys(ZEN_STATIONS);
@@ -415,6 +413,8 @@ function initZenAudioPlayer() {
             audioElement.load();
         }
 
+        localStorage.setItem(STORAGE_KEYS.ZEN_PLAYING, '1');
+
         const playPromise = audioElement.play();
         if (playPromise !== undefined) {
             playPromise.then(() => {
@@ -423,12 +423,21 @@ function initZenAudioPlayer() {
             }).catch((err) => {
                 console.warn('Lecture audio bloquée ou interrompue:', err);
                 setUIPlaying(false);
-                if (statusLabel) statusLabel.textContent = 'Flux indisponible';
+                if (statusLabel) statusLabel.textContent = 'Toucher pour écouter';
+
+                // Reprise au premier toucher de l'utilisateur si bloqué par l'Autoplay Policy
+                const resumeOnUserTouch = () => {
+                    if (localStorage.getItem(STORAGE_KEYS.ZEN_PLAYING) === '1') {
+                        startAudio();
+                    }
+                };
+                window.addEventListener('pointerdown', resumeOnUserTouch, { once: true });
             });
         }
     };
 
     const pauseAudio = () => {
+        localStorage.setItem(STORAGE_KEYS.ZEN_PLAYING, '0');
         audioElement.pause();
         // Libération du tampon réseau pour les flux radio continus
         audioElement.removeAttribute('src');
@@ -554,6 +563,12 @@ function initZenAudioPlayer() {
     }
 
     if (stationNameEl) stationNameEl.textContent = currentStation.name;
+
+    // Reprise automatique de la musique si elle était active avant l'actualisation
+    const wasPlaying = localStorage.getItem(STORAGE_KEYS.ZEN_PLAYING) === '1';
+    if (wasPlaying) {
+        startAudio();
+    }
 }
 
 /**

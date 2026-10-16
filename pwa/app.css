@@ -38,6 +38,10 @@
     padding: 0;
 }
 
+html, body {
+    overscroll-behavior-y: contain;
+}
+
 body {
     font-family: var(--font-stack);
     background-color: var(--bg-main);
