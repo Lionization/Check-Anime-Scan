@@ -18,25 +18,11 @@ const STORAGE_KEYS = {
 };
 
 const ZEN_STATIONS = {
-    lofi: {
-        id: 'lofi',
-        name: 'Lofi Chillhop Radio (24/7)',
-        desc: 'Beats lofi & chill pour la lecture',
-        url: 'https://stream.laut.fm/lofi',
-        loop: false
-    },
     anime_ost: {
         id: 'anime_ost',
         name: 'Stereo Anime (OST & Soundtracks)',
         desc: 'Bandes originales d’animes & jeux vidéo',
         url: 'https://radio.stereoanime.com/listen/stereoanime/128',
-        loop: false
-    },
-    zen_ambient: {
-        id: 'zen_ambient',
-        name: 'Hotmix Zen (Ambiance douce)',
-        desc: 'Sons contemplatifs sans percussions',
-        url: 'https://streaming.hotmixradio.com/hotmix-zen-en-mp3?provider=radiobrowser',
         loop: false
     },
     plaza: {
@@ -182,9 +168,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Actualisation
-    refreshBtn.addEventListener('click', () => {
-        loadDataFromGist(true);
+    // Actualisation de l'application (Recherche de nouvelle version PWA & Service Worker)
+    refreshBtn.addEventListener('click', async () => {
+        refreshBtn.classList.add('rotating');
+        showToast('Mise à jour de l’application...');
+
+        if ('serviceWorker' in navigator) {
+            try {
+                const reg = await navigator.serviceWorker.getRegistration();
+                if (reg) {
+                    await reg.update();
+                }
+            } catch (err) {
+                console.warn('Erreur vérification SW:', err);
+            }
+        }
+
+        setTimeout(() => {
+            window.location.reload();
+        }, 500);
     });
 
     const populateSettingsFields = () => {
@@ -322,15 +324,15 @@ function initZenAudioPlayer() {
     const playIcon = playBtn.querySelector('.play-icon');
     const pauseIcon = playBtn.querySelector('.pause-icon');
 
-    // Récupération des préférences persistées (migration automatique des anciens IDs koto et eastern vers lofi)
+    // Récupération des préférences persistées (repli vers la station active si non reconnue)
     let savedStationId = localStorage.getItem(STORAGE_KEYS.ZEN_STATION);
-    if (!savedStationId || savedStationId === 'koto' || savedStationId === 'eastern' || !ZEN_STATIONS[savedStationId]) {
-        savedStationId = 'lofi';
+    if (!savedStationId || !ZEN_STATIONS[savedStationId]) {
+        savedStationId = 'anime_ost';
     }
     // Volume de base à 1.0 (100%) pour laisser le contrôle intégral au mixeur matériel du téléphone
     audioElement.volume = 1.0;
 
-    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.lofi;
+    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.anime_ost;
     if (stationSelect) {
         stationSelect.value = currentStation.id;
     }
@@ -549,6 +551,25 @@ function initZenAudioPlayer() {
     }
 
     if (stationNameEl) stationNameEl.textContent = currentStation.name;
+
+    // Reconnexion automatique au retour du réseau (ex: sortie de tunnel / métro)
+    window.addEventListener('online', () => {
+        if (localStorage.getItem(STORAGE_KEYS.ZEN_PLAYING) === '1' && audioElement.paused) {
+            startAudio();
+        }
+    });
+
+    // Gestion des micro-coupures réseau sur le flux audio
+    audioElement.addEventListener('error', () => {
+        if (localStorage.getItem(STORAGE_KEYS.ZEN_PLAYING) === '1') {
+            if (statusLabel) statusLabel.textContent = 'Reconnexion réseau...';
+            setTimeout(() => {
+                if (localStorage.getItem(STORAGE_KEYS.ZEN_PLAYING) === '1' && navigator.onLine) {
+                    startAudio();
+                }
+            }, 3000);
+        }
+    });
 
     // Reprise automatique de la musique si elle était active avant l'actualisation
     const wasPlaying = localStorage.getItem(STORAGE_KEYS.ZEN_PLAYING) === '1';

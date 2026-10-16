@@ -229,6 +229,21 @@ body {
     &:active {
         transform: scale(0.95);
     }
+
+    &.rotating svg {
+        animation: iconSpin 0.7s linear infinite;
+    }
+}
+
+@keyframes iconSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .icon-btn.rotating svg {
+        animation: none;
+    }
 }
 
 .audio-badge {
