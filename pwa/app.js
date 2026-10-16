@@ -80,6 +80,12 @@ function registerAppServiceWorker() {
     }).catch((err) => {
         console.warn('Erreur SW:', err);
     });
+
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.action === 'processPendingSyncQueue') {
+            processPendingSyncQueue();
+        }
+    });
 }
 
 if (document.readyState === 'complete') {
@@ -193,21 +199,24 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshPushStatusUI();
     };
 
+    // Support d'historique et geste retour mobile pour les modales
+    setupModalHistorySupport();
+
     // Gestion du dialogue de réglages
     openSettingsBtn.addEventListener('click', () => {
         populateSettingsFields();
-        settingsDialog.showModal();
+        openModalWithHistory(settingsDialog);
     });
 
     if (setupBtn) {
         setupBtn.addEventListener('click', () => {
             populateSettingsFields();
-            settingsDialog.showModal();
+            openModalWithHistory(settingsDialog);
         });
     }
 
     closeDialogBtn.addEventListener('click', () => {
-        settingsDialog.close();
+        closeModalWithHistory(settingsDialog);
     });
 
     settingsForm.addEventListener('submit', (e) => {
@@ -222,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (gistToken) {
                 localStorage.setItem(STORAGE_KEYS.GIST_TOKEN, gistToken);
             }
-            settingsDialog.close();
+            closeModalWithHistory(settingsDialog);
             showToast('Paramètres enregistrés !');
             loadDataFromGist(true);
         } else {
@@ -233,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Gestion du dialogue d'édition manuelle de chapitre
     if (closeChapterDialogBtn) {
         closeChapterDialogBtn.addEventListener('click', () => {
-            chapterDialog.close();
+            closeModalWithHistory(chapterDialog);
         });
     }
 
@@ -247,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const item = allItems[targetKey];
                 const isAnime = (item.category || '').toUpperCase() === 'ANIMES' || (item.userProgress || '').toLowerCase().includes('épisode');
                 const newProgress = isAnime ? `Épisode ${newNum}` : `Chapitre ${newNum}`;
-                chapterDialog.close();
+                closeModalWithHistory(chapterDialog);
                 markAsRead(targetKey, newProgress);
             }
         });
@@ -1278,14 +1287,33 @@ function renderItems() {
         const catchupBtn = card.querySelector('[data-action="catchup"]');
         if (catchupBtn) {
             catchupBtn.addEventListener('click', () => {
-                markAsRead(urlKey, item.latestState);
+                if (activeFilter === 'unread') {
+                    card.classList.add('read-out');
+                    setTimeout(() => {
+                        markAsRead(urlKey, item.latestState);
+                    }, 220);
+                } else {
+                    markAsRead(urlKey, item.latestState);
+                }
             });
         }
 
         const plusOneBtn = card.querySelector('[data-action="plusone"]');
         if (plusOneBtn) {
             plusOneBtn.addEventListener('click', () => {
-                incrementChapter(urlKey);
+                const currentStr = item.userProgress || item.latestState || '';
+                const currentNum = extractEpisodeNumber(currentStr);
+                const latestNum = extractEpisodeNumber(item.latestState);
+                const willBeFullyRead = (currentNum + 1) >= latestNum && latestNum > 0;
+
+                if (activeFilter === 'unread' && willBeFullyRead) {
+                    card.classList.add('read-out');
+                    setTimeout(() => {
+                        incrementChapter(urlKey);
+                    }, 220);
+                } else {
+                    incrementChapter(urlKey);
+                }
             });
         }
 
@@ -1371,6 +1399,63 @@ function renderItems() {
     });
 }
 
+let _isClosingFromPopstate = false;
+
+/**
+ * Ouvre une boîte de dialogue modale en insérant un état dans l'historique
+ * pour permettre sa fermeture avec le geste "Retour" mobile Android
+ * @param {HTMLDialogElement} dialogEl 
+ */
+function openModalWithHistory(dialogEl) {
+    if (!dialogEl || typeof dialogEl.showModal !== 'function') return;
+    if (dialogEl.open) return;
+    dialogEl.showModal();
+    try {
+        history.pushState({ modalId: dialogEl.id }, '');
+    } catch {
+        // Ignorer si pushState indisponible
+    }
+}
+
+/**
+ * Ferme une boîte de dialogue modale
+ * @param {HTMLDialogElement} dialogEl 
+ */
+function closeModalWithHistory(dialogEl) {
+    if (!dialogEl || !dialogEl.open) return;
+    dialogEl.close();
+}
+
+/**
+ * Configure les écouteurs pour la fermeture naturelle des modales au geste retour mobile
+ */
+function setupModalHistorySupport() {
+    const dialogs = [
+        document.getElementById('settings-dialog'),
+        document.getElementById('chapter-dialog')
+    ].filter(Boolean);
+
+    dialogs.forEach((diag) => {
+        diag.addEventListener('close', () => {
+            if (!_isClosingFromPopstate && history.state?.modalId === diag.id) {
+                try {
+                    history.back();
+                } catch {
+                    // Ignorer
+                }
+            }
+        });
+    });
+
+    window.addEventListener('popstate', () => {
+        _isClosingFromPopstate = true;
+        dialogs.forEach((diag) => {
+            if (diag.open) diag.close();
+        });
+        _isClosingFromPopstate = false;
+    });
+}
+
 /**
  * Ouvre le dialogue modal pour modifier manuellement le numéro de chapitre
  * @param {string} urlKey 
@@ -1389,8 +1474,61 @@ function openChapterEditModal(urlKey, item) {
     const currentNum = extractEpisodeNumber(item.userProgress);
     numberInput.value = currentNum > 0 ? currentNum : '';
 
-    dialog.showModal();
+    openModalWithHistory(dialog);
     numberInput.focus();
+}
+
+let _saveGistTimeout = null;
+let _isSavingGist = false;
+let _hasPendingGistSave = false;
+
+/**
+ * Planifie une sauvegarde vers Gist avec débounce pour regrouper les clics rapides
+ * @param {number} delayMs Délai d'attente en millisecondes (défaut: 450ms)
+ */
+function scheduleSaveItemsToGist(delayMs = 450) {
+    if (_saveGistTimeout) {
+        clearTimeout(_saveGistTimeout);
+    }
+    setSyncStatus('syncing', 'En attente...');
+    _saveGistTimeout = setTimeout(async () => {
+        _saveGistTimeout = null;
+        if (_isSavingGist) {
+            _hasPendingGistSave = true;
+            return;
+        }
+        await executeSaveItemsToGist();
+    }, delayMs);
+}
+
+/**
+ * Exécute la sauvegarde vers Gist de façon sérialisée (évite les requêtes PATCH concurrentes)
+ */
+async function executeSaveItemsToGist() {
+    _isSavingGist = true;
+    _hasPendingGistSave = false;
+    try {
+        await saveItemsToGist();
+    } finally {
+        _isSavingGist = false;
+        if (_hasPendingGistSave) {
+            _hasPendingGistSave = false;
+            await executeSaveItemsToGist();
+        }
+    }
+}
+
+/**
+ * Enregistre une tâche Background Sync si l'API est disponible
+ */
+function registerBackgroundSync() {
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        navigator.serviceWorker.ready.then((reg) => {
+            if (reg.sync) {
+                reg.sync.register('sync-gist-queue').catch(() => {});
+            }
+        }).catch(() => {});
+    }
 }
 
 /**
@@ -1409,8 +1547,8 @@ async function markAsRead(urlKey, newProgressText) {
     renderItems();
     showToast(`Validé : ${newProgressText}`);
 
-    // Sauvegarde distante vers le Gist
-    await saveItemsToGist();
+    // Sauvegarde distante débouncée et sérialisée
+    scheduleSaveItemsToGist();
 }
 
 /**
@@ -1448,9 +1586,10 @@ async function saveItemsToGist() {
         return;
     }
 
-    // Si le terminal est actuellement hors-ligne, mise en file d'attente locale
+    // Si le terminal est actuellement hors-ligne, mise en file d'attente locale et background sync
     if (!navigator.onLine) {
         localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, '1');
+        registerBackgroundSync();
         setSyncStatus('syncing', 'En attente réseau');
         showToast('Enregistré hors-ligne. Synchro automatique dès reconnexion.');
         return;
@@ -1486,6 +1625,7 @@ async function saveItemsToGist() {
         if (!response.ok) {
             console.error('Erreur PATCH Gist:', response.status);
             localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, '1');
+            registerBackgroundSync();
             setSyncStatus('error', 'Erreur sauvegarde');
             showToast('Erreur de synchronisation réseau (mise en attente)', true);
         } else {
@@ -1497,6 +1637,7 @@ async function saveItemsToGist() {
     } catch (err) {
         console.error('Erreur lors de la sauvegarde Gist:', err);
         localStorage.setItem(STORAGE_KEYS.PENDING_SYNC, '1');
+        registerBackgroundSync();
         setSyncStatus('error', 'En attente réseau');
         showToast('Enregistré hors-ligne. Synchro dès reconnexion.');
     }

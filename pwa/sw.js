@@ -160,3 +160,16 @@ self.addEventListener('notificationclick', (event) => {
         })
     );
 });
+
+// Écouteur Background Sync pour traiter automatiquement la file d'attente dès le retour du réseau
+self.addEventListener('sync', (event) => {
+    if (event.tag === 'sync-gist-queue') {
+        event.waitUntil(
+            self.clients.matchAll({ type: 'window' }).then((clientList) => {
+                clientList.forEach((client) => {
+                    client.postMessage({ action: 'processPendingSyncQueue' });
+                });
+            })
+        );
+    }
+});
