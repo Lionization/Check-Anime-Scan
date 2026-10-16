@@ -445,21 +445,15 @@ function initZenAudioPlayer() {
         }
     });
 
-    // Changement de station radio
+    // Changement de station radio avec lecture automatique
     if (stationSelect) {
         stationSelect.addEventListener('change', (e) => {
             const nextStationId = e.target.value;
             if (ZEN_STATIONS[nextStationId]) {
-                const wasPlaying = !audioElement.paused && Boolean(audioElement.src);
                 currentStation = ZEN_STATIONS[nextStationId];
                 localStorage.setItem(STORAGE_KEYS.ZEN_STATION, nextStationId);
                 if (stationNameEl) stationNameEl.textContent = currentStation.name;
-
-                if (wasPlaying) {
-                    startAudio();
-                } else {
-                    if (statusLabel) statusLabel.textContent = 'Prêt';
-                }
+                startAudio();
             }
         });
     }
