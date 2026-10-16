@@ -25,13 +25,6 @@ const ZEN_STATIONS = {
         url: 'https://stream.laut.fm/lofi',
         loop: false
     },
-    drone_zone: {
-        id: 'drone_zone',
-        name: 'SomaFM Drone Zone (Zen)',
-        desc: 'Nappes contemplatives & méditation continue',
-        url: 'https://ice1.somafm.com/dronezone-128-mp3',
-        loop: false
-    },
     anime_ost: {
         id: 'anime_ost',
         name: 'Stereo Anime (OST & Soundtracks)',
@@ -51,13 +44,6 @@ const ZEN_STATIONS = {
         name: 'Nightwave Plaza (Tokyo City Pop)',
         desc: 'Tokyo nostalgie & City Pop 80s',
         url: 'https://radio.plaza.one/mp3',
-        loop: false
-    },
-    groove_salad: {
-        id: 'groove_salad',
-        name: 'SomaFM Groove Salad (Downtempo)',
-        desc: 'Électro ambiante & chillout détente',
-        url: 'https://ice1.somafm.com/groovesalad-128-mp3',
         loop: false
     }
 };

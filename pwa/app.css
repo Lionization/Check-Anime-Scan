@@ -339,7 +339,7 @@ body {
     align-items: center;
     gap: 8px;
     flex: 1;
-    justify-content: flex-end;
+    justify-content: flex-start;
 }
 
 .zen-btn-play {
@@ -368,7 +368,7 @@ body {
 .zen-station-picker {
     flex: 1;
     min-width: 130px;
-    max-width: 190px;
+    max-width: 230px;
 }
 
 .zen-select {
@@ -408,6 +408,7 @@ body {
 }
 
 .zen-btn-pip {
+    margin-left: auto;
     background: transparent;
     border: none;
     color: var(--text-muted);
