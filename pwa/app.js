@@ -17,19 +17,19 @@ const STORAGE_KEYS = {
 };
 
 const ZEN_STATIONS = {
-    koto: {
-        id: 'koto',
-        name: 'Koto & Shakuhachi (Temple Zen)',
-        desc: 'Ishikari Lore — Cordes traditionnelles & bambou',
-        url: 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ishikari%20Lore.mp3',
-        loop: true
+    lofi: {
+        id: 'lofi',
+        name: 'Lofi Chillhop Radio (24/7)',
+        desc: 'Beats lofi & chill pour la lecture',
+        url: 'https://stream.laut.fm/lofi',
+        loop: false
     },
-    eastern: {
-        id: 'eastern',
-        name: 'Méditation Japonaise (Zen)',
-        desc: 'Eastern Thought — Flûte Shakuhachi méditative',
-        url: 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/Eastern%20Thought.mp3',
-        loop: true
+    drone_zone: {
+        id: 'drone_zone',
+        name: 'SomaFM Drone Zone (Zen)',
+        desc: 'Nappes contemplatives & méditation continue',
+        url: 'https://ice1.somafm.com/dronezone-128-mp3',
+        loop: false
     },
     anime_ost: {
         id: 'anime_ost',
@@ -40,7 +40,7 @@ const ZEN_STATIONS = {
     },
     zen_ambient: {
         id: 'zen_ambient',
-        name: 'Ambiance Zen & Nappes douces',
+        name: 'Hotmix Zen (Ambiance douce)',
         desc: 'Sons contemplatifs sans percussions',
         url: 'https://streaming.hotmixradio.com/hotmix-zen-en-mp3?provider=radiobrowser',
         loop: false
@@ -50,6 +50,13 @@ const ZEN_STATIONS = {
         name: 'Nightwave Plaza (Tokyo City Pop)',
         desc: 'Tokyo nostalgie & City Pop 80s',
         url: 'https://radio.plaza.one/mp3',
+        loop: false
+    },
+    groove_salad: {
+        id: 'groove_salad',
+        name: 'SomaFM Groove Salad (Downtempo)',
+        desc: 'Électro ambiante & chillout détente',
+        url: 'https://ice1.somafm.com/groovesalad-128-mp3',
         loop: false
     }
 };
@@ -328,11 +335,14 @@ function initZenAudioPlayer() {
     const playIcon = playBtn.querySelector('.play-icon');
     const pauseIcon = playBtn.querySelector('.pause-icon');
 
-    // Récupération des préférences persistées
-    const savedStationId = localStorage.getItem(STORAGE_KEYS.ZEN_STATION) || 'koto';
+    // Récupération des préférences persistées (migration automatique des anciens IDs koto et eastern vers lofi)
+    let savedStationId = localStorage.getItem(STORAGE_KEYS.ZEN_STATION);
+    if (!savedStationId || savedStationId === 'koto' || savedStationId === 'eastern' || !ZEN_STATIONS[savedStationId]) {
+        savedStationId = 'lofi';
+    }
     const savedVolume = parseFloat(localStorage.getItem(STORAGE_KEYS.ZEN_VOLUME) || '0.7');
 
-    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.koto;
+    let currentStation = ZEN_STATIONS[savedStationId] || ZEN_STATIONS.lofi;
     if (stationSelect) {
         stationSelect.value = currentStation.id;
     }
