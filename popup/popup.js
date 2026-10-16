@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await chrome.storage.local.set(newData);
         await updateBadgeCount(newData);
         renderList(newData, searchInput.value.toLowerCase().trim());
+        chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
     });
 
     /**
@@ -261,6 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await chrome.storage.local.set(newData);
                 await updateBadgeCount(newData);
                 renderList(newData, searchInput.value.toLowerCase().trim());
+                chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
             });
 
             actionsDiv.appendChild(markBtn);
@@ -283,6 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await chrome.storage.local.set(newData);
                 await updateBadgeCount(newData);
                 renderList(newData, searchInput.value.toLowerCase().trim());
+                chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
             });
 
             actionsDiv.appendChild(undoBtn);

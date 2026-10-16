@@ -157,16 +157,28 @@ export async function syncStorageWithGist() {
             const gistProgressNum = extractEpisodeNumber(gistItem.userProgress);
             const localProgressNum = extractEpisodeNumber(localItem.userProgress);
 
+            let itemChanged = false;
+
             // Si la progression du Gist est plus avancée que le local
             if (gistProgressNum > localProgressNum || (!localItem.userProgress && gistItem.userProgress)) {
                 localItem.userProgress = gistItem.userProgress;
+                itemChanged = true;
+            }
 
-                // Recalcul de l'indicateur isNew
-                const latestNum = extractEpisodeNumber(localItem.latestState);
-                if (gistProgressNum >= latestNum && latestNum > 0) {
+            // Recalcul et réconciliation de l'indicateur isNew
+            const latestNum = extractEpisodeNumber(localItem.latestState);
+            const currentProgress = Math.max(gistProgressNum, localProgressNum);
+            if (latestNum > 0 && currentProgress >= latestNum) {
+                if (localItem.isNew !== false) {
                     localItem.isNew = false;
+                    itemChanged = true;
                 }
+            } else if (gistItem.isNew === false && localItem.isNew === true && gistProgressNum >= localProgressNum) {
+                localItem.isNew = false;
+                itemChanged = true;
+            }
 
+            if (itemChanged) {
                 localUpdates[localKey] = localItem;
                 hasLocalChanges = true;
             }
@@ -183,12 +195,22 @@ export async function syncStorageWithGist() {
         const localLatestNum = extractEpisodeNumber(localItem.latestState);
         const gistLatestNum = extractEpisodeNumber(existingGist.latestState);
 
+        // Détermination du flag isNew : ne pas écraser une lecture mobile validée (isNew: false)
+        let resolvedIsNew = localItem.isNew || false;
+        if (localLatestNum > gistLatestNum) {
+            resolvedIsNew = true;
+        } else if (existingGist.isNew === false && gistProgressNum >= localProgressNum && localLatestNum <= gistLatestNum) {
+            resolvedIsNew = false;
+        } else if (localLatestNum > 0 && Math.max(localProgressNum, gistProgressNum) >= localLatestNum) {
+            resolvedIsNew = false;
+        }
+
         const shouldUpdateGist = 
             !mergedGistItems[normKey] ||
             localLatestNum > gistLatestNum ||
             localProgressNum > gistProgressNum ||
             localItem.latestState !== existingGist.latestState ||
-            localItem.isNew !== existingGist.isNew ||
+            resolvedIsNew !== existingGist.isNew ||
             (!existingGist.image && localItem.image);
 
         if (shouldUpdateGist) {
@@ -198,7 +220,7 @@ export async function syncStorageWithGist() {
                 category: localItem.category || 'SCANS',
                 userProgress: localProgressNum >= gistProgressNum ? (localItem.userProgress || '') : (existingGist.userProgress || ''),
                 latestState: localItem.latestState || existingGist.latestState || '',
-                isNew: localItem.isNew || false,
+                isNew: resolvedIsNew,
                 image: localItem.image || existingGist.image || null,
                 updatedAt: Date.now()
             };

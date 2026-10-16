@@ -1003,7 +1003,6 @@ function getItemCategory(item) {
  */
 function isItemUnread(item) {
     if (!item || typeof item !== 'object') return false;
-    if (item.isNew === true) return true;
     if (!item.userProgress && Boolean(item.latestState)) return true;
     if (!item.latestState) return false;
 
@@ -1018,12 +1017,23 @@ function isItemUnread(item) {
     const numUser = extractEpisodeNumber(item.userProgress);
     const numLatest = extractEpisodeNumber(item.latestState);
 
-    // Comparaison numérique classique si les deux ont un numéro
-    if (numLatest > numUser) return true;
-    if (numLatest < numUser && numUser > 0 && numLatest > 0) return false;
+    // Comparaison numérique si des numéros ont été extraits
+    const hasNumUser = typeof item.userProgress === 'string' && /\d/.test(item.userProgress);
+    const hasNumLatest = typeof item.latestState === 'string' && /\d/.test(item.latestState);
 
-    // Si les numéros sont identiques ou absents mais que les libellés diffèrent (ex: dates, sous-titres, bonus)
-    if (cleanUser !== cleanLatest) {
+    if (hasNumUser && hasNumLatest) {
+        if (numLatest > numUser) return true;
+        if (numUser >= numLatest) return false;
+    }
+
+    // Si le flag isNew est explicitement positionné
+    if (item.isNew === true) return true;
+
+    // Si un numéro récent existe mais que l'utilisateur n'en a aucun
+    if (hasNumLatest && !hasNumUser) return true;
+
+    // Repli textuel pour les formats sans numéro (ex: One-shot, Dates, etc.)
+    if (cleanUser && cleanLatest && cleanUser !== cleanLatest) {
         return true;
     }
 
@@ -1393,6 +1403,7 @@ async function markAsRead(urlKey, newProgressText) {
 
     // Mise à jour optimiste locale
     allItems[urlKey].userProgress = newProgressText;
+    allItems[urlKey].isNew = false;
     allItems[urlKey].updatedAt = Date.now();
     localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
     renderItems();
