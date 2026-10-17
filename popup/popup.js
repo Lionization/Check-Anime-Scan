@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const columnsContainer = document.getElementById('columns-container');
     const animesList = document.getElementById('animes-list');
     const scansList = document.getElementById('scans-list');
+    const animesCountEl = document.getElementById('animes-count');
+    const scansCountEl = document.getElementById('scans-count');
     const animesEmpty = document.getElementById('animes-empty');
     const scansEmpty = document.getElementById('scans-empty');
     
@@ -165,6 +167,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         animesList.appendChild(animeFragment);
         scansList.appendChild(scanFragment);
+
+        if (animesCountEl) {
+            animesCountEl.textContent = `(${animeCount})`;
+        }
+        if (scansCountEl) {
+            scansCountEl.textContent = `(${scanCount})`;
+        }
 
         animesEmpty.classList.toggle('hidden', animeCount > 0);
         scansEmpty.classList.toggle('hidden', scanCount > 0);

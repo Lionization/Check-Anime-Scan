@@ -126,14 +126,14 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m12 3-9 5 9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>
                         </svg>
-                        <span>Tout</span>
+                        <span>Tout <span id="count-all" class="filter-count"></span></span>
                     </button>
                     <button type="button" class="format-btn" data-type="scans" role="radio" aria-checked="false" title="Scans uniquement">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
                             <path d="M6 6h10M6 10h10M6 14h6"/>
                         </svg>
-                        <span>Scans</span>
+                        <span>Scans <span id="count-scans" class="filter-count"></span></span>
                     </button>
                     <button type="button" class="format-btn" data-type="animes" role="radio" aria-checked="false" title="Animes uniquement">
                         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -141,7 +141,7 @@
                             <polyline points="17 2 12 7 7 2"/>
                             <polygon points="10 11 15 14.5 10 18 10 11" fill="currentColor"/>
                         </svg>
-                        <span>Animes</span>
+                        <span>Animes <span id="count-animes" class="filter-count"></span></span>
                     </button>
                 </div>
                 <button type="button" id="sort-toggle-btn" class="sort-btn" aria-label="Changer le mode de tri" title="Trier par date ou titre">
@@ -225,7 +225,8 @@
                         <span class="field-note">Entrez le dernier numéro lu pour ajuster votre progression.</span>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer modal-footer-split">
+                    <button type="button" id="delete-chapter-item-btn" class="btn btn-danger">Supprimer de la liste</button>
                     <button type="submit" class="btn btn-primary">Valider la progression</button>
                 </div>
             </form>

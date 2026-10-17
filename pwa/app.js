@@ -255,6 +255,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 markAsRead(targetKey, newProgress);
             }
         });
+
+        const deleteChapterItemBtn = document.getElementById('delete-chapter-item-btn');
+        if (deleteChapterItemBtn) {
+            deleteChapterItemBtn.addEventListener('click', () => {
+                const targetKey = document.getElementById('chapter-target-key').value;
+                if (targetKey && allItems[targetKey]) {
+                    const title = allItems[targetKey].title || 'la série';
+                    delete allItems[targetKey];
+                    localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
+                    closeModalWithHistory(chapterDialog);
+                    renderItems();
+                    showToast(`Supprimé : ${title}`);
+                    scheduleSaveItemsToGist();
+                }
+            });
+        }
     }
 
     // Initialisation Push dès que le Service Worker est prêt
@@ -1116,10 +1132,40 @@ function updateStatusUI() {
 }
 
 /**
+ * Met à jour le nombre d'animes et de scans suivis affichés dans les filtres
+ */
+function updateFilterCounts() {
+    const entries = Object.values(allItems).filter(item => item && typeof item === 'object' && item.title);
+    const itemsToCount = searchQuery
+        ? entries.filter(item => (item.title || '').toLowerCase().includes(searchQuery))
+        : entries;
+
+    let scansCount = 0;
+    let animesCount = 0;
+
+    for (const item of itemsToCount) {
+        if (getItemCategory(item) === 'ANIMES') {
+            animesCount++;
+        } else {
+            scansCount++;
+        }
+    }
+
+    const countAllEl = document.getElementById('count-all');
+    const countScansEl = document.getElementById('count-scans');
+    const countAnimesEl = document.getElementById('count-animes');
+
+    if (countAllEl) countAllEl.textContent = `(${itemsToCount.length})`;
+    if (countScansEl) countScansEl.textContent = `(${scansCount})`;
+    if (countAnimesEl) countAnimesEl.textContent = `(${animesCount})`;
+}
+
+/**
  * Effectue le rendu de la liste des cartes
  */
 function renderItems() {
     updateAppBadge();
+    updateFilterCounts();
     const gridEl = document.getElementById('items-grid');
     const emptyEl = document.getElementById('empty-state');
     gridEl.innerHTML = '';
