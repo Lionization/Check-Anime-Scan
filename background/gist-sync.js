@@ -3,7 +3,7 @@
  * Permet l'échange d'état sans serveur entre l'extension PC et la PWA mobile.
  */
 
-import { getAppSettings, extractEpisodeNumber, updateBadgeCount, CONSTANTS, isItemUnread } from '../utils.js';
+import { getAppSettings, extractEpisodeNumber, updateBadgeCount, CONSTANTS, isItemUnread, findTargetBookmarkFolders } from '../utils.js';
 
 const GIST_FILENAME = 'suivi.json';
 const GITHUB_API_URL = 'https://api.github.com/gists';
@@ -129,24 +129,58 @@ export async function syncStorageWithGist() {
         return { success: false, message: 'Identifiants Gist non configurés' };
     }
 
+    // 1. Identification stricte des favoris Chrome actifs dans les dossiers ciblés (ANIMES, SCANS)
+    let validBookmarkUrls = null;
+    if (chrome?.bookmarks?.getTree) {
+        try {
+            const bookmarks = await chrome.bookmarks.getTree();
+            const targets = [];
+            findTargetBookmarkFolders(bookmarks, settings.targetFolders, targets);
+            validBookmarkUrls = new Set(targets.map(t => normalizeUrlKey(t.url)).filter(Boolean));
+        } catch (e) {
+            console.warn('Impossible de lire les favoris Chrome pour la réconciliation:', e);
+        }
+    }
+
     const gistData = await fetchGistData(settings.gistId, settings.gistToken);
     const localData = await chrome.storage.local.get(null);
 
     const gistItems = gistData?.items || {};
     const localUpdates = {};
+    const localKeysToRemove = [];
     const mergedGistItems = { ...gistItems };
     let hasLocalChanges = false;
     let hasGistChanges = false;
 
-    // 1. Indexer les éléments locaux par URL normalisée
+    // 2. Élimination des orphelins locaux et distants supprimés des favoris Chrome
+    if (validBookmarkUrls && validBookmarkUrls.size > 0) {
+        for (const [key, item] of Object.entries(localData)) {
+            if (key === CONSTANTS.SETTINGS_STORAGE_KEY || !item) continue;
+            const normUrl = normalizeUrlKey(item.url || '');
+            if (!normUrl || !validBookmarkUrls.has(normUrl)) {
+                localKeysToRemove.push(key);
+            }
+        }
+
+        for (const gistKey of Object.keys(mergedGistItems)) {
+            const normGistKey = normalizeUrlKey(gistKey || mergedGistItems[gistKey]?.url || '');
+            if (!normGistKey || !validBookmarkUrls.has(normGistKey)) {
+                delete mergedGistItems[gistKey];
+                hasGistChanges = true;
+            }
+        }
+    }
+
+    // 3. Indexer les éléments locaux valides par URL normalisée
     const localByUrl = new Map();
     for (const [key, item] of Object.entries(localData)) {
         if (key === CONSTANTS.SETTINGS_STORAGE_KEY || !item || !item.url) continue;
+        if (localKeysToRemove.includes(key)) continue;
         const normUrl = normalizeUrlKey(item.url);
         localByUrl.set(normUrl, { key, item });
     }
 
-    // 2. Fusion Gist -> Local (prise en compte des lectures faites sur mobile et nouveautés cloud)
+    // 4. Fusion Gist -> Local (prise en compte des lectures faites sur mobile et nouveautés cloud)
     for (const [urlKey, gistItem] of Object.entries(gistItems)) {
         if (!gistItem || typeof gistItem !== 'object') continue;
         const normKey = normalizeUrlKey(urlKey || gistItem.url);
@@ -191,26 +225,10 @@ export async function syncStorageWithGist() {
                 localUpdates[localKey] = localItem;
                 hasLocalChanges = true;
             }
-        } else if (gistItem.title && (gistItem.url || urlKey)) {
-            // Animé ou scan présent sur le Gist mais pas encore sous forme de favori local
-            const itemUrl = gistItem.url || urlKey;
-            const newKey = `gist_${normKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-            const newItem = {
-                title: gistItem.title,
-                url: itemUrl,
-                category: gistItem.category || 'ANIMES',
-                userProgress: gistItem.userProgress || '',
-                latestState: gistItem.latestState || gistItem.latestEpisode || '',
-                image: gistItem.image || null,
-                isNew: isItemUnread(gistItem),
-                timestamp: gistItem.updatedAt || Date.now()
-            };
-            localUpdates[newKey] = newItem;
-            hasLocalChanges = true;
         }
     }
 
-    // 3. Fusion Local -> Gist (propagation des derniers chapitres scrapés et lectures PC)
+    // 5. Fusion Local -> Gist (propagation des derniers chapitres scrapés et lectures PC)
     for (const [, { item: localItem }] of localByUrl) {
         const normKey = normalizeUrlKey(localItem.url);
         const existingGist = mergedGistItems[normKey] || {};
@@ -253,17 +271,26 @@ export async function syncStorageWithGist() {
         }
     }
 
-    // 4. Appliquer les modifications locales si nécessaire
-    if (hasLocalChanges) {
+    // 6. Appliquer les suppressions et modifications locales
+    if (localKeysToRemove.length > 0) {
+        await chrome.storage.local.remove(localKeysToRemove);
+        hasLocalChanges = true;
+    }
+
+    if (Object.keys(localUpdates).length > 0) {
         await chrome.storage.local.set(localUpdates);
+        hasLocalChanges = true;
+    }
+
+    if (hasLocalChanges) {
         const refreshed = await chrome.storage.local.get(null);
         await updateBadgeCount(refreshed);
     }
 
-    // 5. Pousser vers le Gist si l'état distant doit être actualisé
+    // 7. Pousser vers le Gist si l'état distant doit être actualisé ou purgé
     if (hasGistChanges || !gistData) {
         await updateGistData(settings.gistId, settings.gistToken, mergedGistItems, gistData?._pushSubscription);
     }
 
-    return { success: true, message: 'Synchronisation réussie' };
+    return { success: true, message: 'Synchronisation et nettoyage réussis' };
 }
