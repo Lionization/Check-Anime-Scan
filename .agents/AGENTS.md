@@ -84,10 +84,11 @@ Toutes les briques du projet partagent ce format de données strict, indexé par
 
 ## 5. Détails Spécifiques PWA & Service Worker
 
-- **Source de Vérité de Version** : Le numéro de version réside exclusivement dans `pwa/version.js` (`self.APP_VERSION`).
-  - `pwa/index.html` l'affiche dans le badge `#app-version-badge`.
+- **Source de Vérité de Version & Règle Pré-Push** : Le numéro de version réside exclusivement dans `pwa/version.js` (`self.APP_VERSION`).
+  - **OBLIGATION SYSTÉMATIQUE** : Avant chaque commit et push (`git push`), l'agent **DOIT IMPÉRATIVEMENT** incrémenter le numéro de version (SemVer patch, ex: `2.1.2` ➔ `2.1.3`) dans `pwa/version.js` de manière autonome, sans attendre de rappel de l'utilisateur.
+  - L'exécution de `npm test` synchronise ensuite automatiquement `manifest.json` et `package.json` via `scripts/sync-version.mjs`.
+  - `pwa/index.html`, le popup et les options affichent cette version dynamique.
   - `pwa/sw.js` l'utilise pour nommer son cache : `check-scans-v${self.APP_VERSION}`.
-  - Pour déployer une mise à jour, incrémenter uniquement `self.APP_VERSION` dans `pwa/version.js`.
 - **Règle de Cache PWA (`pwa/sw.js`)** :
   - **App Shell mis en cache** : `./`, `index.html`, `app.css`, `app.js`, `version.js`, `manifest.json`, icônes.
   - **Bypass absolu** : Toute requête vers l'API GitHub (`api.github.com`) ou le streaming audio (`.mp3` ou `destination === 'audio'`) doit traverser directement vers le réseau sans passer par le cache.
