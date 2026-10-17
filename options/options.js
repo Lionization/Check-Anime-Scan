@@ -20,6 +20,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const importFileInput = document.getElementById('import-file-input');
     const toastEl = document.getElementById('toast');
 
+    const versionBadge = document.getElementById('app-version-badge');
+    if (versionBadge) {
+        versionBadge.textContent = `v${chrome.runtime.getManifest().version}`;
+    }
+
     /** @type {string[]} */
     let currentFolders = [];
 

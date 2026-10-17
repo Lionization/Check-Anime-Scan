@@ -10,7 +10,8 @@ import {
     cleanTitle, 
     cleanStateDisplay, 
     formatRelativeTime,
-    runWithConcurrency 
+    runWithConcurrency,
+    isItemUnread
 } from './utils.js';
 
 console.log('=== 🧪 SUITE DE TESTS COMPLÈTE CHECK ANIME & SCANS ===\n');
@@ -53,11 +54,11 @@ const resAnimeNominal = parseAnimeSama(animeSamaMock);
 assert.strictEqual(typeof resAnimeNominal === 'object' ? resAnimeNominal.text : resAnimeNominal, 'Épisode 24', 'Doit extraire l\'épisode sélectionné');
 assert.strictEqual(resAnimeNominal.image, 'https://anime-sama.fr/images/cover.jpg', 'Doit extraire la cover og:image');
 
-// Cas dégradé : HTML sans options sélectionnées -> Fallback d'empreinte
+// Cas dégradé : HTML sans options sélectionnées -> Doit retourner null
 const resAnimeEmpty = parseAnimeSama('<html><body><p>Texte sans épisode</p></body></html>');
-assert.ok(typeof resAnimeEmpty === 'string' && resAnimeEmpty.startsWith('Longueur/Etat HTML:'), 'Doit générer un fallback d\'empreinte');
+assert.strictEqual(resAnimeEmpty, null, 'Doit retourner null si aucun épisode détecté');
 assert.strictEqual(parseAnimeSama(null), null);
-console.log('   ✓ Cas nominal, fallback d\'empreinte et résilience validés');
+console.log('   ✓ Cas nominal et résilience (zéro résidu/fallback) validés');
 
 // -------------------------------------------------------------
 // 3. Tests de l'Adaptateur Webtoons
@@ -146,21 +147,7 @@ console.log('   ✓ Extraction de décimaux, entiers et tags masqués validée')
 // 7. Tests Logique Métier : Détection Lu / Non Lu (isItemUnread)
 // -------------------------------------------------------------
 console.log('\n7. Tests Détection de Non Lu (Règle Métier Anti-Régression) :');
-/**
- * Règle canonique de détection unread conforme à pwa/app.js
- */
-function isItemUnread(item) {
-    if (!item || !item.latestEpisode) return false;
-    if (item.isNew === false) return false;
-
-    const numUser = extractEpisodeNumber(item.userProgress || '');
-    const numLatest = extractEpisodeNumber(item.latestEpisode || '');
-
-    if (numUser > 0 && numLatest > 0) {
-        return numUser < numLatest;
-    }
-    return Boolean(item.isNew);
-}
+// La fonction isItemUnread importée de utils.js fait foi de règle canonique universelle.
 
 // Cas 1 : L'utilisateur est à jour numériquement -> DOIT être lu
 assert.strictEqual(isItemUnread({
@@ -189,7 +176,13 @@ assert.strictEqual(isItemUnread({
     latestEpisode: 'Chapitre 105',
     isNew: false
 }), false, 'Si isNew === false, doit être lu');
-console.log('   ✓ Comparaison numérique et cas limites lu/non-lu validés');
+
+// Cas 5 : Nouvel animé sorti sans historique de lecture utilisateur (Non commencé)
+assert.strictEqual(isItemUnread({
+    userProgress: '',
+    latestState: 'Épisode 1'
+}), true, 'Un nouvel animé sans historique de lecture DOIT être non lu');
+console.log('   ✓ Comparaison numérique, nouveauté sans historique et cas limites lu/non-lu validés');
 
 // -------------------------------------------------------------
 // 8. Tests Normalisation des Clés d'URL

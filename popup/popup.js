@@ -2,9 +2,15 @@
  * @fileoverview Contrôleur de l'interface utilisateur de la Popup pour Check Anime & Scans.
  */
 
-import { decodeHTMLEntities, cleanStateDisplay, updateBadgeCount, formatRelativeTime } from '../utils.js';
+import { decodeHTMLEntities, cleanStateDisplay, updateBadgeCount, formatRelativeTime, isItemUnread } from '../utils.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Affichage dynamique de la version synchronisée
+    const versionBadge = document.getElementById('app-version-badge');
+    if (versionBadge) {
+        versionBadge.textContent = `v${chrome.runtime.getManifest().version}`;
+    }
+
     // Éléments du DOM
     const columnsContainer = document.getElementById('columns-container');
     const animesList = document.getElementById('animes-list');
@@ -71,8 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
     markAllReadBtn.addEventListener('click', async () => {
         const newData = { ...currentUpdates };
         for (const key in newData) {
-            if (newData[key]?.isNew) {
+            if (isItemUnread(newData[key])) {
                 newData[key].isNew = false;
+                newData[key].previousProgress = newData[key].userProgress;
+                newData[key].userProgress = newData[key].latestState || newData[key].userProgress;
             }
         }
         await chrome.storage.local.set(newData);
@@ -115,14 +123,16 @@ document.addEventListener('DOMContentLoaded', () => {
             items = items.filter(item => item.title.toLowerCase().includes(searchQuery));
         }
         
-        // Tri : nouveaux en tête, puis alphabétique
+        // Tri : non lus en tête, puis alphabétique
         items.sort((a, b) => {
-            if (a.isNew && !b.isNew) return -1;
-            if (!a.isNew && b.isNew) return 1;
+            const aUnread = isItemUnread(a);
+            const bUnread = isItemUnread(b);
+            if (aUnread && !bUnread) return -1;
+            if (!aUnread && bUnread) return 1;
             return a.title.localeCompare(b.title);
         });
 
-        const hasNew = items.some(i => i.isNew);
+        const hasNew = items.some(i => isItemUnread(i));
         markAllReadBtn.disabled = !hasNew;
 
         if (items.length === 0) {
@@ -216,6 +226,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             stateSpan.appendChild(progSpan);
             stateSpan.appendChild(latestB);
+        } else if (!item.userProgress && item.latestState) {
+            const cleanLat = cleanStateDisplay(item.latestState);
+
+            const progSpan = document.createElement('span');
+            progSpan.style.color = 'var(--text-muted)';
+            progSpan.textContent = `Non commencé ➔ `;
+
+            const latestB = document.createElement('b');
+            latestB.textContent = cleanLat;
+
+            stateSpan.appendChild(progSpan);
+            stateSpan.appendChild(latestB);
         } else {
             stateSpan.textContent = cleanStateDisplay(item.latestState || item.lastState);
         }
@@ -230,7 +252,8 @@ document.addEventListener('DOMContentLoaded', () => {
             metaDiv.appendChild(timeSpan);
         }
 
-        if (item.isNew) {
+        const unread = isItemUnread(item);
+        if (unread) {
             a.classList.add('is-new');
         }
 
@@ -242,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actionsDiv.className = 'update-actions';
         let hasActions = false;
 
-        if (item.isNew) {
+        if (unread) {
             hasActions = true;
             const markBtn = document.createElement('button');
             markBtn.className = 'btn-mark-read';

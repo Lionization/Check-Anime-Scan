@@ -134,15 +134,58 @@ export function formatRelativeTime(timestamp) {
 }
 
 /**
+ * Détermine si un élément possède des chapitres ou épisodes non lus.
+ * Règle canonique universelle partagée entre l'extension et la PWA.
+ * @param {any} item 
+ * @returns {boolean}
+ */
+export function isItemUnread(item) {
+    if (!item || typeof item !== 'object') return false;
+    if (item.isNew === false) return false;
+
+    const latest = item.latestState || item.latestEpisode;
+    if (!item.userProgress && Boolean(latest)) return true;
+    if (!latest) return false;
+
+    const cleanUser = cleanStateDisplay(item.userProgress || '');
+    const cleanLatest = cleanStateDisplay(latest);
+
+    if (cleanUser && cleanLatest && cleanUser === cleanLatest) {
+        return false;
+    }
+
+    const numUser = extractEpisodeNumber(item.userProgress);
+    const numLatest = extractEpisodeNumber(latest);
+
+    const hasNumUser = typeof item.userProgress === 'string' && /\d/.test(item.userProgress);
+    const hasNumLatest = typeof latest === 'string' && /\d/.test(latest);
+
+    if (hasNumUser && hasNumLatest) {
+        if (numLatest > numUser) return true;
+        if (numUser >= numLatest) return false;
+    }
+
+    if (item.isNew === true) return true;
+
+    if (hasNumLatest && !hasNumUser) return true;
+
+    if (cleanUser && cleanLatest && cleanUser !== cleanLatest) {
+        return item.isNew !== false;
+    }
+
+    return Boolean(item.isNew);
+}
+
+/**
  * Calcule le nombre total d'éléments non lus et met à jour le badge Chrome.
- * @param {Record<string, { isNew?: boolean }>} data Objet des données d'extensions
- * @returns {Promise<number>} Le nombre d'éléments nouveaux calculé
+ * @param {Record<string, any>} data Objet des données d'extensions
+ * @returns {Promise<number>} Le nombre d'éléments non lus calculé
  */
 export async function updateBadgeCount(data) {
     if (!chrome?.action?.setBadgeText) return 0;
     
     const items = data ? Object.values(data) : [];
-    const newCount = items.filter(item => item && item.isNew).length;
+    const newCount = items.filter(item => item && (item.isNew || isItemUnread(item))).length;
     
     if (newCount > 0) {
         await chrome.action.setBadgeText({ text: newCount.toString() });

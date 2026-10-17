@@ -77,7 +77,5 @@ export function parseAnimeSama(htmlText) {
         return coverImage ? { text: detectedText, image: coverImage } : detectedText;
     }
 
-    // Fallback : empreinte de changement
-    const fallbackText = `Longueur/Etat HTML: ${htmlText.length}`;
-    return coverImage ? { text: fallbackText, image: coverImage } : fallbackText;
+    return null;
 }

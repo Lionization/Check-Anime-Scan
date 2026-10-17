@@ -13,7 +13,8 @@ import {
     updateBadgeCount, 
     findTargetBookmarkFolders,
     getAppSettings,
-    runWithConcurrency
+    runWithConcurrency,
+    isItemUnread
 } from '../utils.js';
 
 /**
@@ -43,21 +44,25 @@ export async function checkBookmarksForUpdates() {
 
             // Récupération de l'état stocké précédemment
             const stored = storedAll[bookmark.id];
-            let userProgress = currentState;
+            let userProgress = '';
             let isNew = false;
 
             if (stored) {
                 if (!imageUrl && stored.image) {
                     imageUrl = stored.image;
                 }
-                userProgress = stored.userProgress || stored.lastState || currentState;
+                userProgress = stored.userProgress || stored.lastState || '';
             }
 
-            if (userProgress !== currentState) {
+            if (!stored) {
+                // Nouvel animé ajouté : marqué non lu par défaut s'il a un épisode
+                userProgress = '';
+                isNew = Boolean(currentState);
+            } else if (userProgress !== currentState) {
                 const numUser = extractEpisodeNumber(userProgress);
                 const numCurrent = extractEpisodeNumber(currentState);
 
-                if (numCurrent > numUser) {
+                if (numCurrent > numUser && numCurrent > 0) {
                     if (!stored?.isNew && settings.notificationsEnabled) {
                         chrome.notifications.create({
                             type: 'basic',
@@ -67,7 +72,7 @@ export async function checkBookmarksForUpdates() {
                         });
                     }
                     isNew = true;
-                } else if (numCurrent < numUser) {
+                } else if (numCurrent < numUser && numCurrent > 0) {
                     if (numUser > 10000 && numCurrent < 10000) {
                         userProgress = currentState;
                     } else {
@@ -75,10 +80,10 @@ export async function checkBookmarksForUpdates() {
                         currentState = userProgress;
                     }
                 } else {
-                    isNew = stored?.isNew || false;
+                    isNew = isItemUnread({ userProgress, latestState: currentState, isNew: stored?.isNew });
                 }
             } else {
-                isNew = stored?.isNew || false;
+                isNew = isItemUnread({ userProgress, latestState: currentState, isNew: stored?.isNew });
             }
 
             // Gestion intelligente du timestamp : on conserve la date précédente sauf si une nouveauté est détectée
@@ -216,7 +221,7 @@ async function scrapeAnimeSamaViaOffscreen(url) {
                         url: url
                     }, (response) => {
                         if (chrome.runtime.lastError || !response?.result) {
-                            res("Fallback (Erreur réseau)");
+                            res(null);
                         } else {
                             res(response.result);
                         }

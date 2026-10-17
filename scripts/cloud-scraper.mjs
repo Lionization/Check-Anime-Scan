@@ -144,6 +144,7 @@ async function run() {
         if (newLatestNum > currentLatestNum) {
             console.log(`Nouveauté détectée sur ${item.title || key} : ${scraped.text} (précédent: ${item.latestState})`);
             item.latestState = scraped.text;
+            item.isNew = true;
             if (scraped.image && !item.image) {
                 item.image = scraped.image;
             }

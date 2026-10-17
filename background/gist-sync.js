@@ -3,7 +3,7 @@
  * Permet l'échange d'état sans serveur entre l'extension PC et la PWA mobile.
  */
 
-import { getAppSettings, extractEpisodeNumber, updateBadgeCount, CONSTANTS } from '../utils.js';
+import { getAppSettings, extractEpisodeNumber, updateBadgeCount, CONSTANTS, isItemUnread } from '../utils.js';
 
 const GIST_FILENAME = 'suivi.json';
 const GITHUB_API_URL = 'https://api.github.com/gists';
@@ -146,7 +146,7 @@ export async function syncStorageWithGist() {
         localByUrl.set(normUrl, { key, item });
     }
 
-    // 2. Fusion Gist -> Local (prise en compte des lectures faites sur mobile)
+    // 2. Fusion Gist -> Local (prise en compte des lectures faites sur mobile et nouveautés cloud)
     for (const [urlKey, gistItem] of Object.entries(gistItems)) {
         if (!gistItem || typeof gistItem !== 'object') continue;
         const normKey = normalizeUrlKey(urlKey || gistItem.url);
@@ -156,8 +156,23 @@ export async function syncStorageWithGist() {
             const { key: localKey, item: localItem } = localEntry;
             const gistProgressNum = extractEpisodeNumber(gistItem.userProgress);
             const localProgressNum = extractEpisodeNumber(localItem.userProgress);
+            const gistLatest = gistItem.latestState || gistItem.latestEpisode || '';
+            const gistLatestNum = extractEpisodeNumber(gistLatest);
+            const localLatestNum = extractEpisodeNumber(localItem.latestState);
 
             let itemChanged = false;
+
+            // Récupération de l'image si manquante localement
+            if (!localItem.image && gistItem.image) {
+                localItem.image = gistItem.image;
+                itemChanged = true;
+            }
+
+            // Si le Gist a un latestState plus récent ou que le local n'en a pas
+            if (gistLatest && (gistLatestNum > localLatestNum || !localItem.latestState)) {
+                localItem.latestState = gistLatest;
+                itemChanged = true;
+            }
 
             // Si la progression du Gist est plus avancée que le local
             if (gistProgressNum > localProgressNum || (!localItem.userProgress && gistItem.userProgress)) {
@@ -165,16 +180,10 @@ export async function syncStorageWithGist() {
                 itemChanged = true;
             }
 
-            // Recalcul et réconciliation de l'indicateur isNew
-            const latestNum = extractEpisodeNumber(localItem.latestState);
-            const currentProgress = Math.max(gistProgressNum, localProgressNum);
-            if (latestNum > 0 && currentProgress >= latestNum) {
-                if (localItem.isNew !== false) {
-                    localItem.isNew = false;
-                    itemChanged = true;
-                }
-            } else if (gistItem.isNew === false && localItem.isNew === true && gistProgressNum >= localProgressNum) {
-                localItem.isNew = false;
+            // Recalcul et réconciliation de l'indicateur isNew basé sur la règle unifiée
+            const expectedIsNew = isItemUnread(localItem);
+            if (localItem.isNew !== expectedIsNew) {
+                localItem.isNew = expectedIsNew;
                 itemChanged = true;
             }
 
@@ -182,6 +191,22 @@ export async function syncStorageWithGist() {
                 localUpdates[localKey] = localItem;
                 hasLocalChanges = true;
             }
+        } else if (gistItem.title && (gistItem.url || urlKey)) {
+            // Animé ou scan présent sur le Gist mais pas encore sous forme de favori local
+            const itemUrl = gistItem.url || urlKey;
+            const newKey = `gist_${normKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            const newItem = {
+                title: gistItem.title,
+                url: itemUrl,
+                category: gistItem.category || 'ANIMES',
+                userProgress: gistItem.userProgress || '',
+                latestState: gistItem.latestState || gistItem.latestEpisode || '',
+                image: gistItem.image || null,
+                isNew: isItemUnread(gistItem),
+                timestamp: gistItem.updatedAt || Date.now()
+            };
+            localUpdates[newKey] = newItem;
+            hasLocalChanges = true;
         }
     }
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Check Anime & Scans",
   "short_name": "Check Scans",
-  "version": "1.0",
+  "version": "2.1.1",
   "description": "Vérifie les nouveaux épisodes et chapitres de vos favoris (Animes et Scans).",
   "permissions": [
     "bookmarks",
@@ -49,8 +49,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*/*"],
-      "js": ["content/content.js"],
+      "matches": [
+        "*://*/*"
+      ],
+      "js": [
+        "content/content.js"
+      ],
       "all_frames": true
     }
   ]

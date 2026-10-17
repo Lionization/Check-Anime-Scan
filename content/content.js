@@ -52,39 +52,79 @@
      * Traite le scraping d'Anime-Sama lorsqu'il est chargé dans une iframe offscreen
      */
     function handleBackgroundScrape() {
-        let epNum = null;
-        let coverImage = null;
+        const executeExtraction = () => {
+            let epNum = null;
+            let coverImage = null;
 
-        // Image de couverture
-        const imgMeta = document.querySelector('meta[property="og:image"]');
-        if (imgMeta?.content) {
-            coverImage = imgMeta.content;
-        }
+            // Image de couverture
+            const imgMeta = document.querySelector('meta[property="og:image"]');
+            if (imgMeta?.content) {
+                coverImage = imgMeta.content;
+            }
 
-        const select = getAnimeSamaSelectElement();
-        if (select) {
-            let maxEp = -1;
-            let type = "Épisode";
+            // 1. Recherche via le sélecteur d'épisodes s'il est présent et alimenté
+            const select = getAnimeSamaSelectElement();
+            if (select && select.options && select.options.length > 0) {
+                let maxEp = -1;
+                let type = "Épisode";
 
-            for (const opt of select.options) {
-                const match = opt.text.match(/(\d+(?:\.\d+)?)/);
-                if (match) {
-                    const num = parseFloat(match[1]);
-                    if (num > maxEp) {
-                        maxEp = num;
-                        if (/chapitre/i.test(opt.text)) type = "Chapitre";
+                for (const opt of select.options) {
+                    const match = opt.text.match(/(\d+(?:\.\d+)?)/);
+                    if (match) {
+                        const num = parseFloat(match[1]);
+                        if (num > maxEp) {
+                            maxEp = num;
+                            if (/chapitre/i.test(opt.text)) type = "Chapitre";
+                        }
                     }
                 }
+                if (maxEp > -1) epNum = `${type} ${maxEp}`;
             }
-            if (maxEp > -1) epNum = `${type} ${maxEp}`;
-        }
 
-        // Renvoyer les données au document offscreen
-        safeSendMessage({
-            action: 'offscreenScrapedData',
-            originalUrl: currentUrl,
-            data: { text: epNum, image: coverImage }
-        });
+            // 2. Recherche via les liens d'épisodes dans le document (ex: pages catalogue)
+            if (!epNum) {
+                const epLinks = document.querySelectorAll('a[href*="episode"], a[href*="ep-"], a[href*="saison"]');
+                let maxLinkEp = -1;
+                for (const link of epLinks) {
+                    const match = (link.textContent + ' ' + link.href).match(/(?:[éeE]pisode|ep)[-_ ]*(\d+(?:\.\d+)?)/i);
+                    if (match) {
+                        const num = parseFloat(match[1]);
+                        if (num > maxLinkEp) maxLinkEp = num;
+                    }
+                }
+                if (maxLinkEp > -1) epNum = `Épisode ${maxLinkEp}`;
+            }
+
+            // 3. Heuristique textuelle globale dans le corps de la page
+            if (!epNum && document.body) {
+                const bodyText = document.body.innerText || '';
+                const regex = /(?:[éeE]pisode|chapitre)[\s-]*(\d+(?:\.\d+)?)/gi;
+                let match;
+                let maxTextEp = -1;
+                let textType = "Épisode";
+                while ((match = regex.exec(bodyText)) !== null) {
+                    const num = parseFloat(match[1]);
+                    if (num > maxTextEp && num < 2000) { // Plafond réaliste pour éviter les années
+                        maxTextEp = num;
+                        if (/chapitre/i.test(match[0])) textType = "Chapitre";
+                    }
+                }
+                if (maxTextEp > -1) epNum = `${textType} ${maxTextEp}`;
+            }
+
+            // Renvoyer les données au document offscreen (null si rien n'est trouvé, zéro résidu de fallback)
+            safeSendMessage({
+                action: 'offscreenScrapedData',
+                originalUrl: currentUrl,
+                data: epNum ? { text: epNum, image: coverImage } : null
+            });
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => setTimeout(executeExtraction, 300));
+        } else {
+            setTimeout(executeExtraction, 300);
+        }
     }
 
     /**

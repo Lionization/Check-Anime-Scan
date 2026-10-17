@@ -171,6 +171,20 @@
             font-weight: 700;
             letter-spacing: 0.2px;
             line-height: 1.2;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        & .brand-version {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: var(--radius-full);
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            letter-spacing: 0.02em;
         }
 
         & .header-subtitle {
