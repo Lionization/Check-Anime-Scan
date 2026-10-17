@@ -109,16 +109,19 @@ export async function checkBookmarksForUpdates() {
         // Sauvegarde de l'état local
         await chrome.storage.local.set(updates);
 
-        // Mise à jour centralisée du badge
-        const currentData = await chrome.storage.local.get(null);
-        await updateBadgeCount(currentData);
-
         // Nettoyage des favoris supprimés
+        const currentData = await chrome.storage.local.get(null);
         const validIds = targets.map(b => b.id);
         const keysToRemove = Object.keys(currentData).filter(key => key !== CONSTANTS.SETTINGS_STORAGE_KEY && !validIds.includes(key));
         if (keysToRemove.length > 0) {
             await chrome.storage.local.remove(keysToRemove);
+            for (const key of keysToRemove) {
+                delete currentData[key];
+            }
         }
+
+        // Mise à jour centralisée du badge
+        await updateBadgeCount(currentData);
 
     } catch (error) {
         console.error("Erreur lors de la vérification des favoris:", error);

@@ -269,9 +269,28 @@ async function handleMarkAsRead(request, sender) {
     }
 }
 
-// Nettoyage immédiat du storage lors de la suppression d'un favori Chrome
-chrome.bookmarks.onRemoved.addListener((id) => {
-    chrome.storage.local.remove(id, () => {
-        console.log(`Favori ${id} supprimé du stockage local.`);
-    });
-});
+let _bookmarkSyncDebounce = null;
+
+/**
+ * Réconcilie automatiquement le stockage local et le Gist distant dès qu'un favori Chrome est modifié/supprimé/créé/déplacé.
+ */
+function handleBookmarksChanged() {
+    if (_bookmarkSyncDebounce) {
+        clearTimeout(_bookmarkSyncDebounce);
+    }
+    _bookmarkSyncDebounce = setTimeout(async () => {
+        _bookmarkSyncDebounce = null;
+        try {
+            await checkBookmarksForUpdates();
+            await syncStorageWithGist();
+        } catch (error) {
+            console.error("Erreur lors de la réconciliation automatique des favoris:", error);
+        }
+    }, 400);
+}
+
+// Détection automatique de la suppression, déplacement, modification ou création d'un favori Chrome
+chrome.bookmarks.onRemoved.addListener(handleBookmarksChanged);
+chrome.bookmarks.onMoved.addListener(handleBookmarksChanged);
+chrome.bookmarks.onChanged.addListener(handleBookmarksChanged);
+chrome.bookmarks.onCreated.addListener(handleBookmarksChanged);

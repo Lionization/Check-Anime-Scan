@@ -255,22 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 markAsRead(targetKey, newProgress);
             }
         });
-
-        const deleteChapterItemBtn = document.getElementById('delete-chapter-item-btn');
-        if (deleteChapterItemBtn) {
-            deleteChapterItemBtn.addEventListener('click', () => {
-                const targetKey = document.getElementById('chapter-target-key').value;
-                if (targetKey && allItems[targetKey]) {
-                    const title = allItems[targetKey].title || 'la série';
-                    delete allItems[targetKey];
-                    localStorage.setItem(STORAGE_KEYS.CACHED_DATA, JSON.stringify(allItems));
-                    closeModalWithHistory(chapterDialog);
-                    renderItems();
-                    showToast(`Supprimé : ${title}`);
-                    scheduleSaveItemsToGist();
-                }
-            });
-        }
     }
 
     // Initialisation Push dès que le Service Worker est prêt
