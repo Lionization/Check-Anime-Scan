@@ -9,19 +9,39 @@ const GIST_FILENAME = 'suivi.json';
 const GITHUB_API_URL = 'https://api.github.com/gists';
 
 /**
- * Normalise une URL pour servir de clé unique fiable.
+ * Normalise une URL pour servir de clé unique valide (protocole + host + pathname sans trailing slash).
+ * Conserve une URL navigable complète sans altérer le domaine.
  * @param {string} url 
  * @returns {string}
  */
 export function normalizeUrlKey(url) {
     if (!url || typeof url !== 'string') return '';
     try {
-        const parsed = new URL(url);
-        // Conserve protocole, host et pathname sans trailing slash
+        const parsed = new URL(url.trim());
         const path = parsed.pathname.replace(/\/+$/, '');
-        return `${parsed.origin}${path}`;
+        return `${parsed.protocol}//${parsed.host}${path}`;
     } catch {
         return url.trim().replace(/\/+$/, '');
+    }
+}
+
+/**
+ * Calcule une empreinte agnostique de domaine pour comparer deux URLs ayant le même chemin et le même site racine.
+ * Exemple : 'https://anime-sama.si/catalogue/dreamland/' et 'https://anime-sama.to/catalogue/dreamland'
+ * ont la même empreinte : 'anime-sama:/catalogue/dreamland'.
+ * @param {string} url 
+ * @returns {string}
+ */
+export function getUrlFingerprint(url) {
+    if (!url || typeof url !== 'string') return '';
+    try {
+        const parsed = new URL(url.trim());
+        const path = parsed.pathname.toLowerCase().replace(/\/+$/, '');
+        // Retrait générique du www et du TLD (.to, .si, .fr, .com, etc.)
+        const hostBase = parsed.hostname.toLowerCase().replace(/^www\./, '').replace(/\.[a-z]{2,10}(?:\.[a-z]{2})?$/i, '');
+        return `${hostBase}:${path}`;
+    } catch {
+        return url.trim().toLowerCase().replace(/\/+$/, '');
     }
 }
 
@@ -131,12 +151,14 @@ export async function syncStorageWithGist() {
 
     // 1. Identification stricte des favoris Chrome actifs dans les dossiers ciblés (ANIMES, SCANS)
     let validBookmarkUrls = null;
+    let validBookmarkFps = null;
     if (chrome?.bookmarks?.getTree) {
         try {
             const bookmarks = await chrome.bookmarks.getTree();
             const targets = [];
             findTargetBookmarkFolders(bookmarks, settings.targetFolders, targets);
             validBookmarkUrls = new Set(targets.map(t => normalizeUrlKey(t.url)).filter(Boolean));
+            validBookmarkFps = new Set(targets.map(t => getUrlFingerprint(t.url)).filter(Boolean));
         } catch (e) {
             console.warn('Impossible de lire les favoris Chrome pour la réconciliation:', e);
         }
@@ -157,34 +179,41 @@ export async function syncStorageWithGist() {
         for (const [key, item] of Object.entries(localData)) {
             if (key === CONSTANTS.SETTINGS_STORAGE_KEY || !item) continue;
             const normUrl = normalizeUrlKey(item.url || '');
-            if (!normUrl || !validBookmarkUrls.has(normUrl)) {
+            const fp = getUrlFingerprint(item.url || '');
+            if (!normUrl || (!validBookmarkUrls.has(normUrl) && !validBookmarkFps.has(fp))) {
                 localKeysToRemove.push(key);
             }
         }
 
         for (const gistKey of Object.keys(mergedGistItems)) {
-            const normGistKey = normalizeUrlKey(gistKey || mergedGistItems[gistKey]?.url || '');
-            if (!normGistKey || !validBookmarkUrls.has(normGistKey)) {
+            const rawUrl = gistKey || mergedGistItems[gistKey]?.url || '';
+            const normGistKey = normalizeUrlKey(rawUrl);
+            const fp = getUrlFingerprint(rawUrl);
+            if (!normGistKey || (!validBookmarkUrls.has(normGistKey) && !validBookmarkFps.has(fp))) {
                 delete mergedGistItems[gistKey];
                 hasGistChanges = true;
             }
         }
     }
 
-    // 3. Indexer les éléments locaux valides par URL normalisée
+    // 3. Indexer les éléments locaux valides par URL normalisée et par empreinte
     const localByUrl = new Map();
+    const localByFp = new Map();
     for (const [key, item] of Object.entries(localData)) {
         if (key === CONSTANTS.SETTINGS_STORAGE_KEY || !item || !item.url) continue;
         if (localKeysToRemove.includes(key)) continue;
         const normUrl = normalizeUrlKey(item.url);
+        const fp = getUrlFingerprint(item.url);
         localByUrl.set(normUrl, { key, item });
+        if (fp) localByFp.set(fp, { key, item });
     }
 
     // 4. Fusion Gist -> Local (prise en compte des lectures faites sur mobile et nouveautés cloud)
     for (const [urlKey, gistItem] of Object.entries(gistItems)) {
         if (!gistItem || typeof gistItem !== 'object') continue;
         const normKey = normalizeUrlKey(urlKey || gistItem.url);
-        const localEntry = localByUrl.get(normKey);
+        const fp = getUrlFingerprint(urlKey || gistItem.url);
+        const localEntry = localByUrl.get(normKey) || (fp ? localByFp.get(fp) : null);
 
         if (localEntry) {
             const { key: localKey, item: localItem } = localEntry;
@@ -231,7 +260,23 @@ export async function syncStorageWithGist() {
     // 5. Fusion Local -> Gist (propagation des derniers chapitres scrapés et lectures PC)
     for (const [, { item: localItem }] of localByUrl) {
         const normKey = normalizeUrlKey(localItem.url);
-        const existingGist = mergedGistItems[normKey] || {};
+        const localFp = getUrlFingerprint(localItem.url);
+
+        let existingGist = mergedGistItems[normKey];
+        let oldGistKey = normKey;
+
+        // Si non trouvé par clé directe, chercher par empreinte agnostique de domaine
+        if (!existingGist && localFp) {
+            for (const [gKey, gItem] of Object.entries(mergedGistItems)) {
+                if (getUrlFingerprint(gKey || gItem?.url) === localFp) {
+                    existingGist = gItem;
+                    oldGistKey = gKey;
+                    break;
+                }
+            }
+        }
+
+        existingGist = existingGist || {};
 
         const localProgressNum = extractEpisodeNumber(localItem.userProgress);
         const gistProgressNum = extractEpisodeNumber(existingGist.userProgress);
@@ -250,6 +295,7 @@ export async function syncStorageWithGist() {
 
         const shouldUpdateGist = 
             !mergedGistItems[normKey] ||
+            oldGistKey !== normKey ||
             localLatestNum > gistLatestNum ||
             localProgressNum > gistProgressNum ||
             localItem.latestState !== existingGist.latestState ||
@@ -257,6 +303,11 @@ export async function syncStorageWithGist() {
             (!existingGist.image && localItem.image);
 
         if (shouldUpdateGist) {
+            // Si l'élément existait sous un ancien domaine, supprimer l'ancienne clé pour éviter le doublon
+            if (oldGistKey !== normKey && mergedGistItems[oldGistKey]) {
+                delete mergedGistItems[oldGistKey];
+            }
+
             mergedGistItems[normKey] = {
                 title: localItem.title,
                 url: localItem.url,

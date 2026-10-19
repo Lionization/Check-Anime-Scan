@@ -45,15 +45,26 @@ const HTML_ENTITIES = {
 const ENTITY_REGEX = new RegExp(Object.keys(HTML_ENTITIES).join('|'), 'g');
 
 /**
- * Décode les entités HTML d'une chaîne de caractères (avec support du double-encodage).
+ * Décode les entités HTML d'une chaîne de caractères (avec support des entités numériques et double-encodage).
  * @param {string|null|undefined} text Chaîne brute à décoder
  * @returns {string} Chaîne propre et décodée
  */
 export function decodeHTMLEntities(text) {
     if (!text || typeof text !== 'string') return '';
-    let decoded = text.replace(ENTITY_REGEX, match => HTML_ENTITIES[match] || match);
+    
+    const decodePass = (str) => {
+        // 1. Décodage des entités numériques décimales (ex: &#039;, &#39;) et hexadécimales (ex: &#x27;)
+        let res = str.replace(/&#(?:x([0-9a-fA-F]+)|([0-9]+));/g, (match, hex, dec) => {
+            const code = hex ? parseInt(hex, 16) : parseInt(dec, 10);
+            return isNaN(code) ? match : String.fromCodePoint(code);
+        });
+        // 2. Décodage des entités nommées
+        return res.replace(ENTITY_REGEX, match => HTML_ENTITIES[match] || match);
+    };
+
+    let decoded = decodePass(text);
     if (decoded.includes('&')) {
-        decoded = decoded.replace(ENTITY_REGEX, match => HTML_ENTITIES[match] || match);
+        decoded = decodePass(decoded);
     }
     return decoded;
 }
@@ -93,7 +104,8 @@ export function extractEpisodeNumber(str) {
  */
 export function cleanStateDisplay(stateStr) {
     if (!stateStr || typeof stateStr !== 'string') return 'État inconnu';
-    return stateStr.replace(/\s*\|#\d+(?:\.\d+)?\|\s*/g, '').trim();
+    const cleaned = stateStr.replace(/\s*\|#\d+(?:\.\d+)?\|\s*/g, '').trim();
+    return decodeHTMLEntities(cleaned);
 }
 
 /**

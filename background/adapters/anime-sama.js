@@ -13,9 +13,13 @@ export function parseAnimeSama(htmlText) {
 
     let coverImage = null;
     const imgRegex = /<meta\s+property="og:image"\s+content="([^"]+)"/i;
+    const imgOeuvreRegex = /<img[^>]+(?:id=["']imgOeuvre["'][^>]*src=["']([^"']+)["']|src=["']([^"']+)["'][^>]*id=["']imgOeuvre["'])/i;
     const imgMatch = htmlText.match(imgRegex);
+    const imgOeuvreMatch = htmlText.match(imgOeuvreRegex);
     if (imgMatch) {
         coverImage = imgMatch[1];
+    } else if (imgOeuvreMatch) {
+        coverImage = imgOeuvreMatch[1] || imgOeuvreMatch[2];
     }
 
     let detectedText = null;
@@ -41,6 +45,17 @@ export function parseAnimeSama(htmlText) {
         
         if (maxEp > -1) {
             detectedText = `${type} ${maxEp}`;
+        }
+    }
+    
+    // Heuristique 1.5 : Recherche de tableau eps1 déclaré inline
+    if (!detectedText) {
+        const epsInlineMatch = htmlText.match(/(?:var\s+)?eps1\s*=\s*\[([\s\S]*?)\];/);
+        if (epsInlineMatch) {
+            const count = epsInlineMatch[1].split(',').map(s => s.trim()).filter(s => s.length > 4 && (s.startsWith('"') || s.startsWith("'"))).length;
+            if (count > 0) {
+                detectedText = `Épisode ${count}`;
+            }
         }
     }
     

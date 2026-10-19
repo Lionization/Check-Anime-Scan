@@ -13,5 +13,19 @@
       "urlFilter": "||anime-sama.*",
       "resourceTypes": ["sub_frame"]
     }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Referer", "operation": "set", "value": "https://anime-sama.to/" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||anime-sama.*",
+      "resourceTypes": ["xmlhttprequest", "other", "sub_frame"]
+    }
   }
 ]

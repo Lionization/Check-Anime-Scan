@@ -58,8 +58,11 @@
 
             // Image de couverture
             const imgMeta = document.querySelector('meta[property="og:image"]');
+            const imgOeuvre = document.getElementById('imgOeuvre');
             if (imgMeta?.content) {
                 coverImage = imgMeta.content;
+            } else if (imgOeuvre?.src) {
+                coverImage = imgOeuvre.src;
             }
 
             // 1. Recherche via le sélecteur d'épisodes s'il est présent et alimenté
@@ -79,6 +82,21 @@
                     }
                 }
                 if (maxEp > -1) epNum = `${type} ${maxEp}`;
+            }
+
+            // 1.5. Recherche via variable eps1 déclarée dans les scripts de la page
+            if (!epNum) {
+                const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+                for (const s of scripts) {
+                    const match = (s.textContent || '').match(/(?:var\s+)?eps1\s*=\s*\[([\s\S]*?)\];/);
+                    if (match) {
+                        const count = match[1].split(',').map(str => str.trim()).filter(str => str.length > 4 && (str.startsWith('"') || str.startsWith("'"))).length;
+                        if (count > 0) {
+                            epNum = `Épisode ${count}`;
+                            break;
+                        }
+                    }
+                }
             }
 
             // 2. Recherche via les liens d'épisodes dans le document (ex: pages catalogue)

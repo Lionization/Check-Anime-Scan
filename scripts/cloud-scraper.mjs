@@ -79,8 +79,33 @@ async function scrapeUrl(url) {
     if (!html) return null;
 
     if (url.includes('anime-sama')) {
-        const res = parseAnimeSama(html);
-        return typeof res === 'string' ? { text: res } : res;
+        let res = parseAnimeSama(html);
+        let epText = typeof res === 'string' ? res : res?.text;
+        let coverImg = typeof res === 'object' && res?.image ? res.image : null;
+
+        if (!epText) {
+            const epScriptMatch = html.match(/<script[^>]+src=['"]([^'"]*episodes\.js[^'"]*)['"]/i);
+            if (epScriptMatch) {
+                try {
+                    const epUrl = new URL(epScriptMatch[1], url).href;
+                    const epHtml = await fetchPage(epUrl);
+                    if (epHtml) {
+                        const epsMatch = epHtml.match(/(?:var\s+)?eps1\s*=\s*\[([\s\S]*?)\];/);
+                        if (epsMatch) {
+                            const count = epsMatch[1].split(',').map(s => s.trim()).filter(s => s.length > 4 && (s.startsWith('"') || s.startsWith("'"))).length;
+                            if (count > 0) epText = `Épisode ${count}`;
+                        }
+                    }
+                } catch (e) {
+                    // Ignorer
+                }
+            }
+        }
+
+        if (epText) {
+            return { text: epText, image: coverImg };
+        }
+        return res ? (typeof res === 'string' ? { text: res } : res) : null;
     }
 
     if (url.includes('webtoons.com')) {

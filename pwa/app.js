@@ -968,13 +968,17 @@ function sanitizeUrl(url) {
 }
 
 /**
- * Nettoie une chaîne de statut pour l'affichage (supprime les tags techniques |#122|)
+ * Nettoie une chaîne de statut pour l'affichage (supprime les tags techniques |#122| et décode les entités)
  * @param {string|null|undefined} stateStr 
  * @returns {string}
  */
 function cleanStateDisplay(stateStr) {
     if (!stateStr || typeof stateStr !== 'string') return '';
-    return stateStr.replace(/\s*\|#\d+(?:\.\d+)?\|\s*/g, '').trim();
+    let cleaned = stateStr.replace(/\s*\|#\d+(?:\.\d+)?\|\s*/g, '').trim();
+    return cleaned.replace(/&#(?:x([0-9a-fA-F]+)|([0-9]+));/g, (match, hex, dec) => {
+        const code = hex ? parseInt(hex, 16) : parseInt(dec, 10);
+        return isNaN(code) ? match : String.fromCodePoint(code);
+    });
 }
 
 /**

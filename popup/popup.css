@@ -258,10 +258,14 @@
 
     /* --- Barre de recherche --- */
     .search-container {
+        display: flex;
+        gap: 8px;
+        align-items: center;
         margin-bottom: 16px;
 
         & input {
-            width: 100%;
+            flex: 1;
+            min-width: 0;
             padding: 9px 12px;
             border-radius: var(--radius);
             border: 1px solid var(--border);
@@ -279,6 +283,48 @@
                 border-color: var(--primary);
                 box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
             }
+        }
+    }
+
+    .sort-btn {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        padding: 0 10px;
+        height: 38px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        border-radius: var(--radius);
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+
+        &:hover {
+            color: var(--text-color);
+            border-color: var(--text-muted);
+        }
+
+        &[aria-pressed="true"] {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        &:active {
+            transform: scale(0.96);
+        }
+
+        & svg, & span {
+            pointer-events: none;
         }
     }
 

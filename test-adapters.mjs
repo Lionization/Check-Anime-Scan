@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { parseAnimeSama } from './background/adapters/anime-sama.js';
 import { parseWebtoons } from './background/adapters/webtoons.js';
 import { parseMangago } from './background/adapters/mangago.js';
-import { normalizeUrlKey } from './background/gist-sync.js';
+import { normalizeUrlKey, getUrlFingerprint } from './background/gist-sync.js';
 import { 
     decodeHTMLEntities, 
     extractEpisodeNumber, 
@@ -41,7 +41,7 @@ console.log('\n2. Tests Adaptateur Anime-Sama :');
 const animeSamaMock = `
 <!DOCTYPE html>
 <html>
-<head><meta property="og:image" content="https://anime-sama.fr/images/cover.jpg"></head>
+<head><meta property="og:image" content="https://anime-sama.to/images/cover.jpg"></head>
 <body>
     <select id="selectEpisodes">
         <option value="1">Épisode 22</option>
@@ -52,7 +52,7 @@ const animeSamaMock = `
 </html>`;
 const resAnimeNominal = parseAnimeSama(animeSamaMock);
 assert.strictEqual(typeof resAnimeNominal === 'object' ? resAnimeNominal.text : resAnimeNominal, 'Épisode 24', 'Doit extraire l\'épisode sélectionné');
-assert.strictEqual(resAnimeNominal.image, 'https://anime-sama.fr/images/cover.jpg', 'Doit extraire la cover og:image');
+assert.strictEqual(resAnimeNominal.image, 'https://anime-sama.to/images/cover.jpg', 'Doit extraire la cover og:image');
 
 // Cas dégradé : HTML sans options sélectionnées -> Doit retourner null
 const resAnimeEmpty = parseAnimeSama('<html><body><p>Texte sans épisode</p></body></html>');
@@ -113,9 +113,11 @@ console.log('   ✓ Normalisation de chapitre, cover et absence de résultat val
 console.log('\n5. Tests Décodage & Nettoyage de Titre :');
 assert.strictEqual(decodeHTMLEntities('&amp;rsquo;'), '’', 'Doit supporter le double échappement HTML');
 assert.strictEqual(decodeHTMLEntities('&eacute;&amp;&quot;'), 'é&"', 'Doit décoder accents et guillemets');
+assert.strictEqual(decodeHTMLEntities('Ep.134 : L&#039;accord (1)'), "Ep.134 : L'accord (1)", 'Doit décoder les entités numériques avec zéro');
 assert.strictEqual(decodeHTMLEntities(''), '');
 assert.strictEqual(decodeHTMLEntities(null), '');
 
+assert.strictEqual(cleanStateDisplay('Ep.134 : L&#039;accord (1) |#134|'), "Ep.134 : L'accord (1)", 'Doit nettoyer et décoder le statut');
 assert.strictEqual(cleanTitle('Solo Leveling | Scan VF'), 'Solo Leveling', 'Doit retirer le pipe et le suffixe');
 assert.strictEqual(cleanTitle('One Piece &amp; Cie | Manga'), 'One Piece & Cie', 'Doit décoder et nettoyer');
 assert.strictEqual(cleanTitle(null), '');
@@ -185,13 +187,13 @@ assert.strictEqual(isItemUnread({
 console.log('   ✓ Comparaison numérique, nouveauté sans historique et cas limites lu/non-lu validés');
 
 // -------------------------------------------------------------
-// 8. Tests Normalisation des Clés d'URL
+// 8. Tests Normalisation des Clés d'URL et Empreintes Multi-Domaines
 // -------------------------------------------------------------
-console.log('\n8. Tests Normalisation des Clés Gist (normalizeUrlKey) :');
+console.log('\n8. Tests Normalisation des Clés Gist (normalizeUrlKey & getUrlFingerprint) :');
 assert.strictEqual(
-    normalizeUrlKey('https://anime-sama.fr/catalogue/solo-leveling/'),
-    'https://anime-sama.fr/catalogue/solo-leveling',
-    'Doit supprimer le trailing slash'
+    normalizeUrlKey('https://anime-sama.to/catalogue/solo-leveling/'),
+    'https://anime-sama.to/catalogue/solo-leveling',
+    'Doit conserver le domaine d\'origine valide et supprimer le trailing slash'
 );
 assert.strictEqual(
     normalizeUrlKey('https://webtoons.com/fr/action/tower-of-god/viewer?title_no=123'),
@@ -200,7 +202,22 @@ assert.strictEqual(
 );
 assert.strictEqual(normalizeUrlKey(''), '');
 assert.strictEqual(normalizeUrlKey(null), '');
-console.log('   ✓ Normalisation des clés d\'accès validée');
+
+// Tests de réconciliation agnostique de domaine (TLD changeant .si <-> .to)
+assert.strictEqual(
+    getUrlFingerprint('https://anime-sama.si/catalogue/dreamland/'),
+    'anime-sama:/catalogue/dreamland'
+);
+assert.strictEqual(
+    getUrlFingerprint('https://anime-sama.to/catalogue/dreamland'),
+    'anime-sama:/catalogue/dreamland'
+);
+assert.strictEqual(
+    getUrlFingerprint('https://anime-sama.si/catalogue/dreamland/'),
+    getUrlFingerprint('https://anime-sama.to/catalogue/dreamland'),
+    'Deux domaines différents pour la même oeuvre doivent avoir la même empreinte'
+);
+console.log('   ✓ Normalisation des clés d\'accès et empreintes multi-domaines validées');
 
 // -------------------------------------------------------------
 // 9. Tests Formatage du Temps Relatif

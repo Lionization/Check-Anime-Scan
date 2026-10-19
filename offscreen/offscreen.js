@@ -11,19 +11,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         iframe.src = url.toString();
         
         // On renvoie la réponse quand on reçoit le résultat du content script
+        const cleanPath = url.pathname.replace(/\/+$/, '');
         const listener = (request, senderIframe, sendResponseIframe) => {
-            if (request.action === 'offscreenScrapedData' && request.originalUrl.includes(url.pathname)) {
+            if (request.action === 'offscreenScrapedData' && (request.originalUrl.includes(cleanPath) || request.originalUrl.includes(url.pathname))) {
                 chrome.runtime.onMessage.removeListener(listener);
                 sendResponse({ result: request.data });
             }
         };
         chrome.runtime.onMessage.addListener(listener);
         
-        // Timeout de sécurité (si Cloudflare bloque ou autre)
+        // Timeout de sécurité réduit pour éviter de bloquer l'UI
         setTimeout(() => {
             chrome.runtime.onMessage.removeListener(listener);
             sendResponse({ result: null });
-        }, 15000); // 15 secondes max
+        }, 4000); // 4 secondes max
         
         container.appendChild(iframe);
         return true; // Asynchrone

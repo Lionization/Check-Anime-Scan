@@ -26,9 +26,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const optionsBtn = document.getElementById('options-btn');
     const markAllReadBtn = document.getElementById('mark-all-read-btn');
     const searchInput = document.getElementById('search-input');
+    const sortToggleBtn = document.getElementById('sort-toggle-btn');
+    const sortLabel = document.getElementById('sort-label');
 
     /** @type {Record<string, any>} */
     let currentUpdates = {};
+
+    // Mode de tri actif : 'date' par défaut (mémorisée en localStorage)
+    let currentSort = localStorage.getItem('check_scans_popup_sort') || 'date';
+    updateSortUI();
+
+    // Gestion du basculement de tri Date <-> A-Z
+    if (sortToggleBtn) {
+        sortToggleBtn.addEventListener('click', () => {
+            currentSort = currentSort === 'date' ? 'alpha' : 'date';
+            localStorage.setItem('check_scans_popup_sort', currentSort);
+            updateSortUI();
+            renderList(currentUpdates, searchInput.value.toLowerCase().trim());
+        });
+    }
+
+    /**
+     * Met à jour le libellé, l'infobulle et l'accessibilité ARIA du bouton de tri
+     */
+    function updateSortUI() {
+        const isDate = currentSort === 'date';
+        if (sortLabel) {
+            sortLabel.textContent = isDate ? 'Date' : 'A-Z';
+        }
+        if (sortToggleBtn) {
+            sortToggleBtn.setAttribute('aria-pressed', isDate ? 'false' : 'true');
+            sortToggleBtn.setAttribute(
+                'aria-label',
+                isDate 
+                    ? 'Trier par date récente (actif). Cliquer pour trier par ordre alphabétique' 
+                    : 'Trier par ordre alphabétique (actif). Cliquer pour trier par date récente'
+            );
+            sortToggleBtn.title = isDate 
+                ? 'Tri : Par Date récente (cliquer pour tri alphabétique A-Z)' 
+                : 'Tri : Par ordre alphabétique A-Z (cliquer pour tri par Date)';
+        }
+    }
 
     // Initialisation
     loadData();
@@ -125,12 +163,20 @@ document.addEventListener('DOMContentLoaded', () => {
             items = items.filter(item => item.title.toLowerCase().includes(searchQuery));
         }
         
-        // Tri : non lus en tête, puis alphabétique
+        // Tri : non lus en tête, puis selon le mode actif (date récente par défaut ou A-Z)
         items.sort((a, b) => {
             const aUnread = isItemUnread(a);
             const bUnread = isItemUnread(b);
             if (aUnread && !bUnread) return -1;
             if (!aUnread && bUnread) return 1;
+
+            if (currentSort === 'date') {
+                const timeA = a.timestamp || a.updatedAt || 0;
+                const timeB = b.timestamp || b.updatedAt || 0;
+                if (timeB !== timeA) return timeB - timeA;
+                return a.title.localeCompare(b.title);
+            }
+
             return a.title.localeCompare(b.title);
         });
 
