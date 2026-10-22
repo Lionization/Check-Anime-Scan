@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { parseAnimeSama } from './background/adapters/anime-sama.js';
+import { parseAnimeSama, extractEpsMaxEpisode, extractAnimeSamaSeasonUrls } from './background/adapters/anime-sama.js';
 import { parseWebtoons } from './background/adapters/webtoons.js';
 import { parseMangago } from './background/adapters/mangago.js';
 import { normalizeUrlKey, getUrlFingerprint } from './background/gist-sync.js';
@@ -54,11 +54,61 @@ const resAnimeNominal = parseAnimeSama(animeSamaMock);
 assert.strictEqual(typeof resAnimeNominal === 'object' ? resAnimeNominal.text : resAnimeNominal, 'Épisode 24', 'Doit extraire l\'épisode sélectionné');
 assert.strictEqual(resAnimeNominal.image, 'https://anime-sama.to/images/cover.jpg', 'Doit extraire la cover og:image');
 
+// Test Nouveau Template Anime-Sama (Grille ct-ep + reprise à 16 + épisode 17 sorti)
+const animeSamaNewTemplateMock = `
+<div class="ct-page">
+    <a href="/catalogue/the-exiled-heavy-knight/" class="ct-banniere-lien"><img id="imgOeuvre" class="ct-banniere" src="https://cdn.jsdelivr.net/cover.jpg"></a>
+    <span id="ctEpisodeActuel" class="ct-nav-actuel">Épisode 16</span>
+    <span class="as-dd-texte">Episode 16</span>
+    <i id="savedEpisodeId">Episode 16</i>
+    <div id="ctGrille" class="ct-grille">
+        <button type="button" class="ct-ep ct-ep-actuel" title="Episode 16" data-i="15">16</button>
+        <button type="button" class="ct-ep" title="Episode 17" data-i="16">17</button>
+    </div>
+</div>`;
+const resNewTemplate = parseAnimeSama(animeSamaNewTemplateMock);
+assert.strictEqual(typeof resNewTemplate === 'object' ? resNewTemplate.text : resNewTemplate, 'Épisode 17', 'Doit détecter l\'épisode 17 et non la reprise 16');
+assert.strictEqual(resNewTemplate.image, 'https://cdn.jsdelivr.net/cover.jpg');
+
+// Test Multi-lecteurs inline (eps2 et eps3 avec lecteur 1 incomplet)
+const animeSamaMultiPlayerMock = `
+<html><head></head><body>
+<script>
+var eps1 = ["link1", "link2", "link3"]; // 3 épisodes
+var eps2 = ["link1", "link2", "link3", "link4", "link5"]; // 5 épisodes
+</script>
+</body></html>`;
+const resMultiPlayer = parseAnimeSama(animeSamaMultiPlayerMock);
+assert.strictEqual(typeof resMultiPlayer === 'object' ? resMultiPlayer.text : resMultiPlayer, 'Épisode 5', 'Doit prendre le maximum des lecteurs disponibles');
+
+// Test de la fonction factorisée extractEpsMaxEpisode
+const rawJsScript = `
+var eps1 = ["https://site/ep1.mp4", "https://site/ep2.mp4"];
+let eps2 = [\`https://site/ep1.mp4\`, 'https://site/ep2.mp4', "https://site/ep3.mp4", "https://site/ep4.mp4"];
+const epsAS = ["https://site/ep1.mp4"];
+`;
+assert.strictEqual(extractEpsMaxEpisode(rawJsScript), 4, 'Doit trouver 4 comme maximum des lecteurs');
+assert.strictEqual(extractEpsMaxEpisode(''), -1);
+assert.strictEqual(extractEpsMaxEpisode(null), -1);
+
+// Test de la fonction factorisée extractAnimeSamaSeasonUrls
+const catalogueHtmlMock = `
+<html><body>
+    <a href="/catalogue/test/saison1/vostfr">Saison 1</a>
+    <a href="saison2/vostfr">Saison 2</a>
+    <div onclick="panneauAnime('saison3/vostfr')">Saison 3</div>
+</body></html>`;
+const seasons = extractAnimeSamaSeasonUrls(catalogueHtmlMock, 'https://anime-sama.to/catalogue/test/');
+assert.strictEqual(seasons.length, 3, 'Doit extraire les 3 saisons');
+assert.strictEqual(seasons[0], 'https://anime-sama.to/catalogue/test/saison3/vostfr', 'Saison 3 doit être en premier');
+assert.strictEqual(seasons[1], 'https://anime-sama.to/catalogue/test/saison2/vostfr');
+assert.strictEqual(seasons[2], 'https://anime-sama.to/catalogue/test/saison1/vostfr');
+
 // Cas dégradé : HTML sans options sélectionnées -> Doit retourner null
 const resAnimeEmpty = parseAnimeSama('<html><body><p>Texte sans épisode</p></body></html>');
 assert.strictEqual(resAnimeEmpty, null, 'Doit retourner null si aucun épisode détecté');
 assert.strictEqual(parseAnimeSama(null), null);
-console.log('   ✓ Cas nominal et résilience (zéro résidu/fallback) validés');
+console.log('   ✓ Cas nominal, nouveau template ct-ep, multi-lecteurs, helpers factorisés et résilience validés');
 
 // -------------------------------------------------------------
 // 3. Tests de l'Adaptateur Webtoons

@@ -2,7 +2,7 @@
  * @fileoverview Logique de scraping concurrente et résiliente pour Check Anime & Scans.
  */
 
-import { parseAnimeSama } from './adapters/anime-sama.js';
+import { parseAnimeSama, extractEpsMaxEpisode, extractAnimeSamaSeasonUrls } from './adapters/anime-sama.js';
 import { parseWebtoons } from './adapters/webtoons.js';
 import { parseMangago } from './adapters/mangago.js';
 import { 
@@ -205,10 +205,12 @@ async function scrapeAnimeSama(rawUrl) {
         }
 
         clearTimeout(timeoutId);
-        if (!response.ok) return null;
+        if (!response.ok) {
+            return await scrapeAnimeSamaViaOffscreen(rawUrl);
+        }
         const htmlText = await response.text();
 
-        // 1. Essai avec parseAnimeSama standard (couverture + éventuel select/options déjà présents)
+        // 1. Essai avec parseAnimeSama standard (couverture + grille ctGrille/ct-ep + éventuel select/options)
         const parsed = parseAnimeSama(htmlText);
         let coverImage = typeof parsed === 'object' && parsed?.image ? parsed.image : null;
         let detectedText = typeof parsed === 'string' ? parsed : parsed?.text;
@@ -221,36 +223,35 @@ async function scrapeAnimeSama(rawUrl) {
             }
         }
 
-        // 2. Si pas d'épisode détecté, inspecter le script episodes.js
-        if (!detectedText) {
-            const epScriptMatch = htmlText.match(/<script[^>]+src=['"]([^'"]*episodes\.js[^'"]*)['"]/i);
-            if (epScriptMatch) {
-                try {
-                    const epUrl = new URL(epScriptMatch[1], effectiveUrl).href;
-                    const epRes = await fetch(epUrl, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            'Referer': effectiveUrl
-                        }
-                    });
-                    if (epRes.ok) {
-                        const epCode = await epRes.text();
-                        const epsMatch = epCode.match(/(?:var\s+)?eps1\s*=\s*\[([\s\S]*?)\];/);
-                        if (epsMatch) {
-                            const count = epsMatch[1].split(',').map(s => s.trim()).filter(s => s.length > 4 && (s.startsWith('"') || s.startsWith("'"))).length;
-                            if (count > 0) {
-                                detectedText = `Épisode ${count}`;
-                            }
+        // 2. Inspection du script episodes.js s'il est présent (liste maîtresse multi-lecteurs eps1, eps2, eps3...)
+        const epScriptMatch = htmlText.match(/<script[^>]+src=['"]([^'"]*episodes\.js[^'"]*)['"]/i) ||
+                             htmlText.match(/src=['"]([^'"]*episodes\.js(?:\?[^'"]*)?)['"]/i);
+        if (epScriptMatch) {
+            try {
+                const epUrl = new URL(epScriptMatch[1], effectiveUrl).href;
+                const epRes = await fetch(epUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': effectiveUrl
+                    }
+                });
+                if (epRes.ok) {
+                    const epCode = await epRes.text();
+                    const maxEpCount = extractEpsMaxEpisode(epCode);
+                    if (maxEpCount > 0) {
+                        const curNum = extractEpisodeNumber(detectedText);
+                        if (maxEpCount > curNum) {
+                            detectedText = `Épisode ${maxEpCount}`;
                         }
                     }
-                } catch (e) {
-                    // Ignorer
                 }
+            } catch (e) {
+                // Ignorer
             }
         }
 
         // 3. Si c'est une page de scans Anime-Sama, interroger l'API get_nb_chap_et_img.php
-        if (!detectedText && effectiveUrl.includes('/scan/')) {
+        if ((!detectedText || extractEpisodeNumber(detectedText) === 0) && effectiveUrl.includes('/scan/')) {
             const titreMatch = htmlText.match(/<h[1-3][^>]+id=["']titreOeuvre["'][^>]*>([\s\S]*?)<\/h[1-3]>/i);
             if (titreMatch) {
                 try {
@@ -276,17 +277,16 @@ async function scrapeAnimeSama(rawUrl) {
             }
         }
 
-        // 4. Si page catalogue pure (ex: /catalogue/<slug>/), tenter de suivre le premier lien de saison
-        if (!detectedText && !effectiveUrl.includes('/saison') && !effectiveUrl.includes('/scan/')) {
-            const seasonLinkMatch = htmlText.match(/href=["'](\/catalogue\/[^"']+\/(?:saison\d+|scan)\/[^"']*)["']/i);
-            if (seasonLinkMatch) {
-                const subUrl = new URL(seasonLinkMatch[1], effectiveUrl).href;
+        // 4. Si page catalogue pure (ex: /catalogue/<slug>/), suivre les liens de saisons (privilégier la plus récente)
+        if (!effectiveUrl.includes('/saison') && !effectiveUrl.includes('/scan/')) {
+            const foundSeasons = extractAnimeSamaSeasonUrls(htmlText, effectiveUrl);
+            for (const subUrl of foundSeasons) {
                 const subScraped = await scrapeAnimeSama(subUrl);
-                if (subScraped) {
+                if (subScraped && subScraped.text && extractEpisodeNumber(subScraped.text) > 0) {
                     return {
                         text: subScraped.text,
                         image: coverImage || subScraped.image,
-                        resolvedUrl: subScraped.resolvedUrl || effectiveUrl
+                        resolvedUrl: subScraped.resolvedUrl || subUrl
                     };
                 }
             }
@@ -296,6 +296,7 @@ async function scrapeAnimeSama(rawUrl) {
         if (!detectedText) {
             const hasEpisodeIndicator = htmlText.includes('episodes.js') || 
                                        htmlText.includes('selectEpisodes') || 
+                                       htmlText.includes('ctGrille') ||
                                        /finirListe\s*\(/i.test(htmlText);
             if (hasEpisodeIndicator) {
                 detectedText = 'Épisode 1';
@@ -310,7 +311,7 @@ async function scrapeAnimeSama(rawUrl) {
             return { text: 'Non commencé', image: coverImage, resolvedUrl: effectiveUrl };
         }
 
-        return null;
+        return await scrapeAnimeSamaViaOffscreen(rawUrl);
     } catch (e) {
         clearTimeout(timeoutId);
         // Fallback rapide de secours si nécessaire via offscreen

@@ -3,9 +3,10 @@
  * Scrape les séries configurées dans le Gist secret et pousse les nouveautés automatiquement.
  */
 
-import { parseAnimeSama } from '../background/adapters/anime-sama.js';
+import { parseAnimeSama, extractEpsMaxEpisode, extractAnimeSamaSeasonUrls } from '../background/adapters/anime-sama.js';
 import { parseWebtoons } from '../background/adapters/webtoons.js';
 import { parseMangago } from '../background/adapters/mangago.js';
+import { extractEpisodeNumber } from '../utils.js';
 import webpush from 'web-push';
 
 const GIST_ID = process.env.GIST_ID;
@@ -24,21 +25,6 @@ if (VAPID_PRIVATE_KEY) {
 if (!GIST_ID || !GIST_TOKEN) {
     console.log("Variables GIST_ID ou GIST_TOKEN absentes. Arrêt du scraper cloud.");
     process.exit(0);
-}
-
-/**
- * Extrait le numéro numérique
- * @param {string|null|undefined} str 
- * @returns {number}
- */
-function extractEpisodeNumber(str) {
-    if (!str || typeof str !== 'string') return 0;
-    const hiddenMatch = str.match(/\|#(\d+(?:\.\d+)?)\|/);
-    if (hiddenMatch) {
-        return parseFloat(hiddenMatch[1]);
-    }
-    const match = str.match(/(\d+(?:\.\d+)?)/);
-    return match ? parseFloat(match[1]) : 0;
 }
 
 /**
@@ -83,21 +69,36 @@ async function scrapeUrl(url) {
         let epText = typeof res === 'string' ? res : res?.text;
         let coverImg = typeof res === 'object' && res?.image ? res.image : null;
 
-        if (!epText) {
-            const epScriptMatch = html.match(/<script[^>]+src=['"]([^'"]*episodes\.js[^'"]*)['"]/i);
-            if (epScriptMatch) {
-                try {
-                    const epUrl = new URL(epScriptMatch[1], url).href;
-                    const epHtml = await fetchPage(epUrl);
-                    if (epHtml) {
-                        const epsMatch = epHtml.match(/(?:var\s+)?eps1\s*=\s*\[([\s\S]*?)\];/);
-                        if (epsMatch) {
-                            const count = epsMatch[1].split(',').map(s => s.trim()).filter(s => s.length > 4 && (s.startsWith('"') || s.startsWith("'"))).length;
-                            if (count > 0) epText = `Épisode ${count}`;
+        const epScriptMatch = html.match(/<script[^>]+src=['"]([^'"]*episodes\.js[^'"]*)['"]/i) ||
+                             html.match(/src=['"]([^'"]*episodes\.js(?:\?[^'"]*)?)['"]/i);
+        if (epScriptMatch) {
+            try {
+                const epUrl = new URL(epScriptMatch[1], url).href;
+                const epHtml = await fetchPage(epUrl);
+                if (epHtml) {
+                    const maxEpCount = extractEpsMaxEpisode(epHtml);
+                    if (maxEpCount > 0) {
+                        const curNum = extractEpisodeNumber(epText);
+                        if (maxEpCount > curNum) {
+                            epText = `Épisode ${maxEpCount}`;
                         }
                     }
-                } catch (e) {
-                    // Ignorer
+                }
+            } catch (e) {
+                // Ignorer
+            }
+        }
+
+        // Si page catalogue pure, suivre les liens de saisons (privilégier la plus récente)
+        if (!url.includes('/saison') && !url.includes('/scan/')) {
+            const foundSeasons = extractAnimeSamaSeasonUrls(html, url);
+            for (const subUrl of foundSeasons) {
+                const subScraped = await scrapeUrl(subUrl);
+                if (subScraped && subScraped.text && extractEpisodeNumber(subScraped.text) > 0) {
+                    return {
+                        text: subScraped.text,
+                        image: coverImg || subScraped.image
+                    };
                 }
             }
         }

@@ -1031,11 +1031,14 @@ function getItemCategory(item) {
  */
 function isItemUnread(item) {
     if (!item || typeof item !== 'object') return false;
-    if (!item.userProgress && Boolean(item.latestState)) return true;
-    if (!item.latestState) return false;
+    if (item.isNew === false) return false;
+
+    const latest = item.latestState || item.latestEpisode;
+    if (!item.userProgress && Boolean(latest)) return true;
+    if (!latest) return false;
 
     const cleanUser = cleanStateDisplay(item.userProgress || '');
-    const cleanLatest = cleanStateDisplay(item.latestState || '');
+    const cleanLatest = cleanStateDisplay(latest);
 
     // Si les deux états nettoyés sont strictement identiques -> lu
     if (cleanUser && cleanLatest && cleanUser === cleanLatest) {
@@ -1043,11 +1046,11 @@ function isItemUnread(item) {
     }
 
     const numUser = extractEpisodeNumber(item.userProgress);
-    const numLatest = extractEpisodeNumber(item.latestState);
+    const numLatest = extractEpisodeNumber(latest);
 
     // Comparaison numérique si des numéros ont été extraits
     const hasNumUser = typeof item.userProgress === 'string' && /\d/.test(item.userProgress);
-    const hasNumLatest = typeof item.latestState === 'string' && /\d/.test(item.latestState);
+    const hasNumLatest = typeof latest === 'string' && /\d/.test(latest);
 
     if (hasNumUser && hasNumLatest) {
         if (numLatest > numUser) return true;
@@ -1062,10 +1065,10 @@ function isItemUnread(item) {
 
     // Repli textuel pour les formats sans numéro (ex: One-shot, Dates, etc.)
     if (cleanUser && cleanLatest && cleanUser !== cleanLatest) {
-        return true;
+        return item.isNew !== false;
     }
 
-    return false;
+    return Boolean(item.isNew);
 }
 
 /**

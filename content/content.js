@@ -84,18 +84,45 @@
                 if (maxEp > -1) epNum = `${type} ${maxEp}`;
             }
 
-            // 1.5. Recherche via variable eps1 déclarée dans les scripts de la page
-            if (!epNum) {
-                const scripts = Array.from(document.querySelectorAll('script:not([src])'));
-                for (const s of scripts) {
-                    const match = (s.textContent || '').match(/(?:var\s+)?eps1\s*=\s*\[([\s\S]*?)\];/);
+            // 1.2. Recherche via la grille d'épisodes du nouveau template (#ctGrille / .ct-ep)
+            const ctButtons = document.querySelectorAll('button.ct-ep, .ct-ep');
+            if (ctButtons && ctButtons.length > 0) {
+                let maxCtEp = -1;
+                for (const btn of ctButtons) {
+                    const titleText = btn.getAttribute('title') || btn.textContent || '';
+                    const match = titleText.match(/(\d+(?:\.\d+)?)/);
                     if (match) {
-                        const count = match[1].split(',').map(str => str.trim()).filter(str => str.length > 4 && (str.startsWith('"') || str.startsWith("'"))).length;
-                        if (count > 0) {
-                            epNum = `Épisode ${count}`;
-                            break;
-                        }
+                        const num = parseFloat(match[1]);
+                        if (num > maxCtEp) maxCtEp = num;
                     }
+                }
+                if (maxCtEp > -1) {
+                    const curNum = epNum ? (parseFloat(epNum.match(/\d+(?:\.\d+)?/)?.[0] || '-1')) : -1;
+                    if (maxCtEp > curNum) {
+                        epNum = `Épisode ${maxCtEp}`;
+                    }
+                }
+            }
+
+            // 1.5. Recherche via variables eps déclarées dans les scripts de la page (tous les lecteurs : eps1, eps2, eps3...)
+            const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+            let maxScriptCount = -1;
+            for (const s of scripts) {
+                const text = s.textContent || '';
+                const epsRegex = /(?:var|let|const)?\s*(eps\w*)\s*=\s*\[([\s\S]*?)\];?/gi;
+                let m;
+                while ((m = epsRegex.exec(text)) !== null) {
+                    const rawContent = m[2];
+                    const count = rawContent.split(',').map(str => str.trim()).filter(str => str.length > 4 && (str.startsWith('"') || str.startsWith("'") || str.startsWith('`'))).length;
+                    if (count > maxScriptCount) {
+                        maxScriptCount = count;
+                    }
+                }
+            }
+            if (maxScriptCount > 0) {
+                const curNum = epNum ? (parseFloat(epNum.match(/\d+(?:\.\d+)?/)?.[0] || '-1')) : -1;
+                if (maxScriptCount > curNum) {
+                    epNum = `Épisode ${maxScriptCount}`;
                 }
             }
 
@@ -113,9 +140,11 @@
                 if (maxLinkEp > -1) epNum = `Épisode ${maxLinkEp}`;
             }
 
-            // 3. Heuristique textuelle globale dans le corps de la page
+            // 3. Heuristique textuelle globale dans le corps de la page en excluant les reprises en cours
             if (!epNum && document.body) {
-                const bodyText = document.body.innerText || '';
+                const clone = document.body.cloneNode(true);
+                clone.querySelectorAll('#ctEpisodeActuel, .as-dd-texte, #savedEpisodeId, .ct-ep-actuel').forEach(el => el.remove());
+                const bodyText = clone.innerText || '';
                 const regex = /(?:[éeE]pisode|chapitre)[\s-]*(\d+(?:\.\d+)?)/gi;
                 let match;
                 let maxTextEp = -1;
@@ -139,9 +168,9 @@
         };
 
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => setTimeout(executeExtraction, 300));
+            document.addEventListener('DOMContentLoaded', () => setTimeout(executeExtraction, 500));
         } else {
-            setTimeout(executeExtraction, 300);
+            setTimeout(executeExtraction, 500);
         }
     }
 
@@ -252,18 +281,12 @@
 
             chapterText = num ? `${title} |#${num}|` : title;
         } else if (isAnimeSama) {
-            const select = getAnimeSamaSelectElement();
             const isViewer = currentUrl.includes('/scan/') || currentUrl.includes('/saison') || currentUrl.includes('/ep-') || currentUrl.includes('/chapitre-');
-
-            if (select && isViewer) {
-                isValid = true;
-                const selectedOpt = select.options[select.selectedIndex];
-                if (selectedOpt) {
-                    const match = selectedOpt.text.match(/(\d+(?:\.\d+)?)/);
-                    if (match) {
-                        const isChap = /chapitre/i.test(selectedOpt.text);
-                        chapterText = `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
-                    }
+            if (isViewer) {
+                const epText = extractAnimeSamaEpisodeText();
+                if (epText) {
+                    isValid = true;
+                    chapterText = epText;
                 }
             }
         }
@@ -287,6 +310,20 @@
      * @returns {string|null}
      */
     function extractAnimeSamaEpisodeText() {
+        // 1. Indicateurs directs du template Anime-Sama (#ctEpisodeActuel, bouton .ct-ep-actuel, .as-dd-texte)
+        const activeEl = document.getElementById('ctEpisodeActuel') || 
+                         document.querySelector('.ct-ep-actuel') || 
+                         document.querySelector('.as-dd-texte');
+        if (activeEl) {
+            const text = activeEl.getAttribute('title') || activeEl.textContent || '';
+            const match = text.match(/(\d+(?:\.\d+)?)/);
+            if (match) {
+                const isChap = /chapitre/i.test(text);
+                return `${isChap ? 'Chapitre' : 'Épisode'} ${match[1]}`;
+            }
+        }
+
+        // 2. Sélecteur natif classique
         const select = getAnimeSamaSelectElement();
         if (select && select.selectedIndex >= 0) {
             const selectedOpt = select.options[select.selectedIndex];
@@ -299,7 +336,7 @@
             }
         }
 
-        // Recherche dans l'URL si aucun select actif n'est présent
+        // 3. Recherche dans l'URL si aucun sélecteur actif n'est présent
         const urlMatch = currentUrl.match(/(?:ep|episode|chapitre|ch)[-_]?(\d+(?:\.\d+)?)/i);
         if (urlMatch) {
             const isChap = /chapitre|ch/i.test(urlMatch[0]);
