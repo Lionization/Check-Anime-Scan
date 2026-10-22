@@ -60,7 +60,8 @@ async function fetchPage(url) {
  * @param {string} url 
  * @returns {Promise<{ text: string, image?: string|null }|null>}
  */
-async function scrapeUrl(url) {
+async function scrapeUrl(url, isScan = false) {
+    const isScanTarget = isScan || url.includes('/scan/');
     const html = await fetchPage(url);
     if (!html) return null;
 
@@ -80,7 +81,8 @@ async function scrapeUrl(url) {
                     if (maxEpCount > 0) {
                         const curNum = extractEpisodeNumber(epText);
                         if (maxEpCount > curNum) {
-                            epText = `Épisode ${maxEpCount}`;
+                            const epType = isScanTarget ? "Chapitre" : "Épisode";
+                            epText = `${epType} ${maxEpCount}`;
                         }
                     }
                 }
@@ -89,11 +91,11 @@ async function scrapeUrl(url) {
             }
         }
 
-        // Si page catalogue pure, suivre les liens de saisons (privilégier la plus récente)
+        // Si page catalogue pure, suivre les liens de saisons (privilégier scans si demandé)
         if (!url.includes('/saison') && !url.includes('/scan/')) {
-            const foundSeasons = extractAnimeSamaSeasonUrls(html, url);
+            const foundSeasons = extractAnimeSamaSeasonUrls(html, url, isScanTarget);
             for (const subUrl of foundSeasons) {
-                const subScraped = await scrapeUrl(subUrl);
+                const subScraped = await scrapeUrl(subUrl, isScanTarget);
                 if (subScraped && subScraped.text && extractEpisodeNumber(subScraped.text) > 0) {
                     return {
                         text: subScraped.text,
@@ -161,7 +163,8 @@ async function run() {
         const targetUrl = item.url || key;
         if (!targetUrl || !targetUrl.startsWith('http')) continue;
 
-        const scraped = await scrapeUrl(targetUrl);
+        const isScan = item.category === 'SCANS' || /scan/i.test(item.title || '') || /scan/i.test(targetUrl);
+        const scraped = await scrapeUrl(targetUrl, isScan);
         if (!scraped || !scraped.text) continue;
 
         const currentLatestNum = extractEpisodeNumber(item.latestState);

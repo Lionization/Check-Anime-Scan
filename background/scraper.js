@@ -34,7 +34,8 @@ export async function checkBookmarksForUpdates() {
         await runWithConcurrency(targets, 5, async (bookmark) => {
             if (!bookmark?.url) return;
 
-            const scrapedResult = await scrapePage(bookmark.url);
+            const isScan = bookmark.category === 'SCANS' || /scan/i.test(bookmark.title || '') || /scan/i.test(bookmark.url || '');
+            const scrapedResult = await scrapePage(bookmark.url, isScan);
             const title = cleanTitle(bookmark.title);
             const rawState = typeof scrapedResult === 'string' ? scrapedResult : scrapedResult?.text;
             let currentState = rawState ? decodeHTMLEntities(rawState) : '';
@@ -144,9 +145,11 @@ let _activeAnimeSamaDomain = null;
 /**
  * Scrape une page Anime-Sama de façon directe, résiliente et avec support des redirections de domaine.
  * @param {string} rawUrl 
+ * @param {boolean} [isScan=false]
  * @returns {Promise<{ text: string, image?: string|null, resolvedUrl?: string }|null>}
  */
-async function scrapeAnimeSama(rawUrl) {
+async function scrapeAnimeSama(rawUrl, isScan = false) {
+    const isScanTarget = isScan || rawUrl.includes('/scan/');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
@@ -277,11 +280,11 @@ async function scrapeAnimeSama(rawUrl) {
             }
         }
 
-        // 4. Si page catalogue pure (ex: /catalogue/<slug>/), suivre les liens de saisons (privilégier la plus récente)
+        // 4. Si page catalogue pure (ex: /catalogue/<slug>/), suivre les liens de saisons (privilégier scans si demandé)
         if (!effectiveUrl.includes('/saison') && !effectiveUrl.includes('/scan/')) {
-            const foundSeasons = extractAnimeSamaSeasonUrls(htmlText, effectiveUrl);
+            const foundSeasons = extractAnimeSamaSeasonUrls(htmlText, effectiveUrl, isScanTarget);
             for (const subUrl of foundSeasons) {
-                const subScraped = await scrapeAnimeSama(subUrl);
+                const subScraped = await scrapeAnimeSama(subUrl, isScanTarget);
                 if (subScraped && subScraped.text && extractEpisodeNumber(subScraped.text) > 0) {
                     return {
                         text: subScraped.text,
@@ -322,16 +325,17 @@ async function scrapeAnimeSama(rawUrl) {
 /**
  * Effectue la requête HTTP avec timeout AbortController et délègue au bon adaptateur
  * @param {string} url URL cible
+ * @param {boolean} [isScan=false] Indique si la ressource est un scan
  * @returns {Promise<{ text: string, image?: string }|string|null>}
  */
-async function scrapePage(url) {
+async function scrapePage(url, isScan = false) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 secondes max par requête
 
     try {
         if (url.includes('anime-sama.')) {
             clearTimeout(timeoutId);
-            return await scrapeAnimeSama(url);
+            return await scrapeAnimeSama(url, isScan);
         }
 
         const response = await fetch(url, { 

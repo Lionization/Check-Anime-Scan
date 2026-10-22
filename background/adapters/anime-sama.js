@@ -49,13 +49,19 @@ export function parseAnimeSama(htmlText) {
     }
 
     // Heuristique 1.2 : Nouveau template Anime-Sama avec grille d'épisodes (#ctGrille / boutons .ct-ep)
-    const ctEpRegex = /<button[^>]*class=["'][^"']*\bct-ep\b[^"']*["'][^>]*title=["'](?:[ÉEe]pisode|Chapitre)?\s*(\d+(?:\.\d+)?)["'][^>]*>/gi;
+    const isScanContext = /scan/i.test(htmlText) || /chapitre/i.test(htmlText);
+    const ctEpRegex = /<button[^>]*class=["'][^"']*\bct-ep\b[^"']*["'][^>]*title=["'](?:([ÉEe]pisode|Chapitre))?\s*(\d+(?:\.\d+)?)["'][^>]*>/gi;
     let ctMatch;
     let maxCtEp = -1;
+    let ctType = isScanContext ? "Chapitre" : "Épisode";
     while ((ctMatch = ctEpRegex.exec(htmlText)) !== null) {
-        const epNum = parseFloat(ctMatch[1]);
+        const matchedType = ctMatch[1];
+        const epNum = parseFloat(ctMatch[2]);
         if (epNum > maxCtEp) {
             maxCtEp = epNum;
+            if (matchedType) {
+                ctType = /chapitre/i.test(matchedType) ? "Chapitre" : "Épisode";
+            }
         }
     }
     if (maxCtEp === -1) {
@@ -70,7 +76,7 @@ export function parseAnimeSama(htmlText) {
     if (maxCtEp > -1) {
         const curEpNum = detectedText ? parseFloat(detectedText.match(/\d+(?:\.\d+)?/)?.[0] || '-1') : -1;
         if (maxCtEp > curEpNum) {
-            detectedText = `Épisode ${maxCtEp}`;
+            detectedText = `${ctType} ${maxCtEp}`;
         }
     }
     
@@ -79,7 +85,8 @@ export function parseAnimeSama(htmlText) {
     if (inlineEpsCount > -1) {
         const curEpNum = detectedText ? parseFloat(detectedText.match(/\d+(?:\.\d+)?/)?.[0] || '-1') : -1;
         if (inlineEpsCount > curEpNum) {
-            detectedText = `Épisode ${inlineEpsCount}`;
+            const inlineType = isScanContext ? "Chapitre" : "Épisode";
+            detectedText = `${inlineType} ${inlineEpsCount}`;
         }
     }
     
@@ -152,9 +159,10 @@ export function extractEpsMaxEpisode(code) {
  * Extrait et ordonne les URLs des saisons disponibles sur une page catalogue Anime-Sama (saison la plus avancée en tête).
  * @param {string} htmlText Contenu HTML de la page catalogue
  * @param {string} baseUrl URL de référence pour résolution absolue
+ * @param {boolean} [preferScan=false] Si vrai, priorise les URLs de scans sur les animes
  * @returns {string[]} Liste ordonnée des URLs absolues des saisons
  */
-export function extractAnimeSamaSeasonUrls(htmlText, baseUrl) {
+export function extractAnimeSamaSeasonUrls(htmlText, baseUrl, preferScan = false) {
     if (!htmlText || typeof htmlText !== 'string' || !baseUrl) return [];
     const seasonPatterns = [
         /href=["'](\/catalogue\/[^"']+\/(?:saison\d+|scan)\/[^"']*)["']/gi,
@@ -178,6 +186,15 @@ export function extractAnimeSamaSeasonUrls(htmlText, baseUrl) {
         }
     }
     return found.sort((a, b) => {
+        const isScanA = a.includes('/scan');
+        const isScanB = b.includes('/scan');
+        if (preferScan) {
+            if (isScanA && !isScanB) return -1;
+            if (!isScanA && isScanB) return 1;
+        } else {
+            if (isScanA && !isScanB) return 1;
+            if (!isScanA && isScanB) return -1;
+        }
         const numA = parseFloat(a.match(/saison(\d+)/i)?.[1] || '0');
         const numB = parseFloat(b.match(/saison(\d+)/i)?.[1] || '0');
         return numB - numA;

@@ -153,7 +153,6 @@ export function formatRelativeTime(timestamp) {
  */
 export function isItemUnread(item) {
     if (!item || typeof item !== 'object') return false;
-    if (item.isNew === false) return false;
 
     const latest = item.latestState || item.latestEpisode;
     if (!item.userProgress && Boolean(latest)) return true;

@@ -96,19 +96,31 @@ const catalogueHtmlMock = `
 <html><body>
     <a href="/catalogue/test/saison1/vostfr">Saison 1</a>
     <a href="saison2/vostfr">Saison 2</a>
+    <a href="/catalogue/test/scan/vf/">Scans</a>
     <div onclick="panneauAnime('saison3/vostfr')">Saison 3</div>
 </body></html>`;
-const seasons = extractAnimeSamaSeasonUrls(catalogueHtmlMock, 'https://anime-sama.to/catalogue/test/');
-assert.strictEqual(seasons.length, 3, 'Doit extraire les 3 saisons');
-assert.strictEqual(seasons[0], 'https://anime-sama.to/catalogue/test/saison3/vostfr', 'Saison 3 doit être en premier');
-assert.strictEqual(seasons[1], 'https://anime-sama.to/catalogue/test/saison2/vostfr');
-assert.strictEqual(seasons[2], 'https://anime-sama.to/catalogue/test/saison1/vostfr');
+const seasonsAnime = extractAnimeSamaSeasonUrls(catalogueHtmlMock, 'https://anime-sama.to/catalogue/test/', false);
+assert.strictEqual(seasonsAnime[0], 'https://anime-sama.to/catalogue/test/saison3/vostfr', 'Saison 3 doit être en tête si preferScan est faux');
+
+const seasonsScan = extractAnimeSamaSeasonUrls(catalogueHtmlMock, 'https://anime-sama.to/catalogue/test/', true);
+assert.strictEqual(seasonsScan[0], 'https://anime-sama.to/catalogue/test/scan/vf/', 'Scans doit être en tête si preferScan est vrai');
+
+// Nouveau template ct-ep avec chapitres de scans (ex: Overlord)
+const ctScanHtmlMock = `
+<html><body>
+    <div id="ctGrille">
+        <button class="ct-ep" title="Chapitre 80">80</button>
+        <button class="ct-ep" title="Chapitre 81">81</button>
+    </div>
+</body></html>`;
+const resCtScan = parseAnimeSama(ctScanHtmlMock);
+assert.strictEqual(typeof resCtScan === 'string' ? resCtScan : resCtScan?.text, 'Chapitre 81', 'Doit détecter Chapitre 81 dans les boutons ct-ep');
 
 // Cas dégradé : HTML sans options sélectionnées -> Doit retourner null
 const resAnimeEmpty = parseAnimeSama('<html><body><p>Texte sans épisode</p></body></html>');
 assert.strictEqual(resAnimeEmpty, null, 'Doit retourner null si aucun épisode détecté');
 assert.strictEqual(parseAnimeSama(null), null);
-console.log('   ✓ Cas nominal, nouveau template ct-ep, multi-lecteurs, helpers factorisés et résilience validés');
+console.log('   ✓ Cas nominal, nouveau template ct-ep épisodes/chapitres, multi-lecteurs, helpers factorisés et résilience validés');
 
 // -------------------------------------------------------------
 // 3. Tests de l'Adaptateur Webtoons
@@ -222,19 +234,40 @@ assert.strictEqual(isItemUnread({
     isNew: true
 }), true, 'Si userProgress < latestEpisode, doit être non lu');
 
-// Cas 4 : isNew explicite à false (lecture validée manuellement)
+// Cas 4 : L'utilisateur est en retard numériquement mais isNew est à false (ex: Overlord ou Exiled Knight après synchro)
 assert.strictEqual(isItemUnread({
-    userProgress: 'Chapitre 100',
-    latestEpisode: 'Chapitre 105',
+    userProgress: 'Chapitre 50',
+    latestState: 'Chapitre 140',
     isNew: false
-}), false, 'Si isNew === false, doit être lu');
+}), true, 'Si userProgress < latestState numériquement, DOIT être non lu même si isNew === false');
+
+// Cas 4b : L'utilisateur est à jour avec isNew à false -> DOIT être lu
+assert.strictEqual(isItemUnread({
+    userProgress: 'Chapitre 140',
+    latestState: 'Chapitre 140',
+    isNew: false
+}), false, 'Si userProgress === latestState numériquement et isNew === false, doit être lu');
+
+// Cas 4c : Format textuel sans numéro avec isNew à false -> lu
+assert.strictEqual(isItemUnread({
+    userProgress: 'Film Canon',
+    latestState: 'Film Canon Spécial',
+    isNew: false
+}), false, 'Si aucun numéro et isNew === false, doit être considéré lu');
+
+// Cas 4d : Format textuel sans numéro avec isNew à true -> non lu
+assert.strictEqual(isItemUnread({
+    userProgress: 'Film Canon',
+    latestState: 'Film Canon Spécial',
+    isNew: true
+}), true, 'Si aucun numéro et isNew === true, doit être considéré non lu');
 
 // Cas 5 : Nouvel animé sorti sans historique de lecture utilisateur (Non commencé)
 assert.strictEqual(isItemUnread({
     userProgress: '',
     latestState: 'Épisode 1'
 }), true, 'Un nouvel animé sans historique de lecture DOIT être non lu');
-console.log('   ✓ Comparaison numérique, nouveauté sans historique et cas limites lu/non-lu validés');
+console.log('   ✓ Comparaison numérique prioritaire sur isNew, nouveautés sans historique et cas limites validés');
 
 // -------------------------------------------------------------
 // 8. Tests Normalisation des Clés d'URL et Empreintes Multi-Domaines
