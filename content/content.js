@@ -407,14 +407,24 @@
     function initVideoTracker() {
         /** @type {WeakSet<HTMLVideoElement>} */
         const trackedVideos = new WeakSet();
-        let lastMarkedTime = 0;
+        let lastMarkedVideoSrc = '';
 
         function attachToVideo(video) {
             if (!video || trackedVideos.has(video)) return;
             trackedVideos.add(video);
 
+            let hasNotifiedThisVideo = false;
+
+            // Réinitialiser si le lecteur charge un nouvel épisode ou change de source
+            const handleSourceChange = () => {
+                hasNotifiedThisVideo = false;
+            };
+
+            video.addEventListener('loadstart', handleSourceChange, { passive: true });
+            video.addEventListener('emptied', handleSourceChange, { passive: true });
+
             const checkAndNotify = () => {
-                if (!chrome?.runtime?.id) return;
+                if (!chrome?.runtime?.id || hasNotifiedThisVideo) return;
 
                 const duration = video.duration;
                 if (!duration || isNaN(duration) || duration <= 0) return;
@@ -423,11 +433,17 @@
                 const isFinished = video.ended || progress >= 0.75;
 
                 if (isFinished) {
-                    const now = Date.now();
-                    if (now - lastMarkedTime > 3000) {
-                        lastMarkedTime = now;
-                        safeSendMessage({ action: 'markAsReadVideo' });
+                    const videoSrc = video.currentSrc || video.src || '';
+                    if (videoSrc && videoSrc === lastMarkedVideoSrc) {
+                        hasNotifiedThisVideo = true;
+                        return;
                     }
+
+                    hasNotifiedThisVideo = true;
+                    if (videoSrc) {
+                        lastMarkedVideoSrc = videoSrc;
+                    }
+                    safeSendMessage({ action: 'markAsReadVideo' });
                 }
             };
 
@@ -440,8 +456,10 @@
 
             // Vérification périodique toutes les secondes pour les lecteurs personnalisés qui capturent les événements
             const pollInterval = setInterval(() => {
-                if (!chrome?.runtime?.id || !document.contains(video)) {
-                    clearInterval(pollInterval);
+                if (!chrome?.runtime?.id || !document.contains(video) || hasNotifiedThisVideo) {
+                    if (hasNotifiedThisVideo && !document.contains(video)) {
+                        clearInterval(pollInterval);
+                    }
                     return;
                 }
                 if (!video.paused) {
