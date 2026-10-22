@@ -237,9 +237,14 @@ export async function syncStorageWithGist() {
                 itemChanged = true;
             }
 
-            // Si la progression du Gist est plus avancée que le local
-            if (gistProgressNum > localProgressNum || (!localItem.userProgress && gistItem.userProgress)) {
+            // Si la progression du Gist est plus avancée que le local OU si le Gist a été modifié plus récemment (ex: recul manuel de chapitre dans la PWA)
+            const gistTime = gistItem.updatedAt || gistItem.timestamp || 0;
+            const localTime = localItem.updatedAt || localItem.timestamp || 0;
+            const isGistMoreRecent = gistTime > localTime;
+
+            if (gistProgressNum > localProgressNum || (!localItem.userProgress && gistItem.userProgress) || (isGistMoreRecent && gistItem.userProgress && gistItem.userProgress !== localItem.userProgress)) {
                 localItem.userProgress = gistItem.userProgress;
+                localItem.updatedAt = gistTime || Date.now();
                 itemChanged = true;
             }
 
@@ -293,11 +298,15 @@ export async function syncStorageWithGist() {
             resolvedIsNew = false;
         }
 
+        const localTime = localItem.updatedAt || localItem.timestamp || 0;
+        const gistTime = existingGist.updatedAt || existingGist.timestamp || 0;
+        const preferGistProgress = (gistTime > localTime) && Boolean(existingGist.userProgress);
+
         const shouldUpdateGist = 
             !mergedGistItems[normKey] ||
             oldGistKey !== normKey ||
             localLatestNum > gistLatestNum ||
-            localProgressNum > gistProgressNum ||
+            (localProgressNum > gistProgressNum && !preferGistProgress) ||
             localItem.latestState !== existingGist.latestState ||
             resolvedIsNew !== existingGist.isNew ||
             (!existingGist.image && localItem.image);
@@ -312,11 +321,11 @@ export async function syncStorageWithGist() {
                 title: localItem.title,
                 url: localItem.url,
                 category: localItem.category || 'SCANS',
-                userProgress: localProgressNum >= gistProgressNum ? (localItem.userProgress || '') : (existingGist.userProgress || ''),
+                userProgress: preferGistProgress ? existingGist.userProgress : (localProgressNum >= gistProgressNum ? (localItem.userProgress || '') : (existingGist.userProgress || '')),
                 latestState: localItem.latestState || existingGist.latestState || '',
                 isNew: resolvedIsNew,
                 image: localItem.image || existingGist.image || null,
-                updatedAt: Date.now()
+                updatedAt: Math.max(localTime, gistTime, Date.now())
             };
             hasGistChanges = true;
         }

@@ -261,6 +261,14 @@ async function handleMarkAsRead(request, sender) {
             const updatedData = await chrome.storage.local.get(null);
             await updateBadgeCount(updatedData);
 
+            // Confirmation visuelle discrète dans l'onglet
+            if (sender.tab?.id) {
+                chrome.tabs.sendMessage(sender.tab.id, {
+                    action: 'readingProgressToast',
+                    text: `${matchedItem.title || 'Animé'} : ${matchedItem.userProgress} validé`
+                }, { frameId: 0 }).catch(() => {});
+            }
+
             // Propagation asynchrone vers le Gist
             syncStorageWithGist().catch(e => console.error("Erreur synchro Gist après lecture:", e));
         }

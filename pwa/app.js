@@ -764,8 +764,9 @@ async function loadDataFromGist(showLoading = false) {
         // 1. Première tentative avec le token si renseigné
         if (gistToken) {
             try {
-                const response = await fetchWithTimeout(`${GITHUB_API_URL}/${gistId}`, {
+                const response = await fetchWithTimeout(`${GITHUB_API_URL}/${gistId}?_t=${Date.now()}`, {
                     method: 'GET',
+                    cache: 'no-store',
                     headers: {
                         'Authorization': `Bearer ${gistToken}`,
                         'Accept': 'application/vnd.github+json',
@@ -787,8 +788,9 @@ async function loadDataFromGist(showLoading = false) {
         // 2. Repli gracieux : lecture publique sans Authorization (supporté nativement par les Gists secrets)
         if (!data) {
             try {
-                const anonResponse = await fetchWithTimeout(`${GITHUB_API_URL}/${gistId}`, {
+                const anonResponse = await fetchWithTimeout(`${GITHUB_API_URL}/${gistId}?_t=${Date.now()}`, {
                     method: 'GET',
+                    cache: 'no-store',
                     headers: {
                         'Accept': 'application/vnd.github+json',
                         'X-GitHub-Api-Version': '2022-11-28'
@@ -1598,8 +1600,8 @@ async function markAsRead(urlKey, newProgressText) {
     renderItems();
     showToast(`Validé : ${newProgressText}`);
 
-    // Sauvegarde distante débouncée et sérialisée
-    scheduleSaveItemsToGist();
+    // Sauvegarde distante immédiate et sérialisée
+    scheduleSaveItemsToGist(0);
 }
 
 /**
@@ -1632,7 +1634,8 @@ async function saveItemsToGist() {
 
     if (!gistId || !gistToken) {
         if (!gistToken) {
-            showToast('Token GitHub requis pour sauvegarder vos modifications', true);
+            setSyncStatus('error', 'Lecture seule (sans token)');
+            showToast('Token GitHub manquant dans les Réglages : impossible d’enregistrer sur le Gist', true);
         }
         return;
     }
