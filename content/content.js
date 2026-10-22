@@ -16,12 +16,13 @@
             return; // Fenêtre principale hors du périmètre : arrêt immédiat
         }
     } else {
-        // En sous-frame (iframe) : restreint exclusivement aux lecteurs embarqués par Anime-Sama
+        // En sous-frame (iframe) : restreint aux lecteurs embarqués par Anime-Sama ou domaines de streaming connus
         const hasAnimeSamaReferrer = typeof document.referrer === 'string' && document.referrer.includes('anime-sama');
         const hasAnimeSamaAncestor = window.location.ancestorOrigins && Array.from(window.location.ancestorOrigins).some(origin => origin.includes('anime-sama'));
+        const isKnownVideoHost = /ansembed|sendvid|sibnet|vidmoly|myvi|dood|streamtape|vk\.com|uqload|player/i.test(currentUrl);
         
-        if (!hasAnimeSamaReferrer && !hasAnimeSamaAncestor && !isAnimeSama) {
-            return; // Iframe tierce non liée à Anime-Sama : arrêt immédiat
+        if (!hasAnimeSamaReferrer && !hasAnimeSamaAncestor && !isAnimeSama && !isKnownVideoHost) {
+            return; // Iframe tierce non liée au streaming Anime-Sama : arrêt immédiat
         }
     }
 
@@ -351,7 +352,59 @@
     }
 
     /**
-     * Écouteur pour transmettre l'épisode Anime-Sama actif au Service Worker
+     * Affiche une notification visuelle discrète et élégante en haut de l'écran Anime-Sama
+     * @param {string} text Message de confirmation
+     */
+    function showProgressToast(text) {
+        if (!text) return;
+        let toast = document.getElementById('cas-reading-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'cas-reading-toast';
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999999;
+                background: rgba(15, 23, 42, 0.94);
+                color: #38bdf8;
+                border: 1px solid rgba(56, 189, 248, 0.4);
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(8px);
+                padding: 12px 18px;
+                border-radius: 10px;
+                font-family: system-ui, -apple-system, sans-serif;
+                font-size: 14px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                opacity: 0;
+                transform: translateY(-10px);
+                pointer-events: none;
+            `;
+            document.body.appendChild(toast);
+        }
+
+        toast.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>${text}</span>
+        `;
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+
+        clearTimeout(toast._hideTimer);
+        toast._hideTimer = setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-10px)';
+        }, 3500);
+    }
+
+    /**
+     * Écouteur pour transmettre l'épisode Anime-Sama actif au Service Worker et recevoir les confirmations
      */
     function initAnimeSamaMessageListener() {
         if (!chrome?.runtime?.onMessage) return;
@@ -360,6 +413,8 @@
             if (request.action === "getAnimeSamaEpisode") {
                 const epNum = extractAnimeSamaEpisodeText();
                 sendResponse({ episodeText: epNum });
+            } else if (request.action === "readingProgressToast") {
+                showProgressToast(request.text);
             }
         });
     }
@@ -370,7 +425,7 @@
     function initVideoTracker() {
         /** @type {WeakSet<HTMLVideoElement>} */
         const trackedVideos = new WeakSet();
-        let lastMarkedVideoSrc = '';
+        let lastMarkedTime = 0;
 
         function attachToVideo(video) {
             if (!video || trackedVideos.has(video)) return;
@@ -379,20 +434,38 @@
             const checkAndNotify = () => {
                 if (!chrome?.runtime?.id) return;
 
-                const videoSrc = video.currentSrc || video.src || currentUrl;
-                if (lastMarkedVideoSrc && lastMarkedVideoSrc === videoSrc) return;
-
                 const duration = video.duration;
-                const isFinished = video.ended || (duration > 0 && (video.currentTime / duration) >= 0.75);
+                if (!duration || isNaN(duration) || duration <= 0) return;
+
+                const progress = video.currentTime / duration;
+                const isFinished = video.ended || progress >= 0.75;
 
                 if (isFinished) {
-                    lastMarkedVideoSrc = videoSrc;
-                    safeSendMessage({ action: 'markAsReadVideo' });
+                    const now = Date.now();
+                    if (now - lastMarkedTime > 3000) {
+                        lastMarkedTime = now;
+                        safeSendMessage({ action: 'markAsReadVideo' });
+                    }
                 }
             };
 
             video.addEventListener('timeupdate', checkAndNotify, { passive: true });
             video.addEventListener('ended', checkAndNotify, { passive: true });
+            video.addEventListener('seeked', checkAndNotify, { passive: true });
+            video.addEventListener('pause', checkAndNotify, { passive: true });
+            video.addEventListener('play', checkAndNotify, { passive: true });
+            video.addEventListener('loadeddata', checkAndNotify, { passive: true });
+
+            // Vérification périodique toutes les secondes pour les lecteurs personnalisés qui capturent les événements
+            const pollInterval = setInterval(() => {
+                if (!chrome?.runtime?.id || !document.contains(video)) {
+                    clearInterval(pollInterval);
+                    return;
+                }
+                if (!video.paused) {
+                    checkAndNotify();
+                }
+            }, 1000);
         }
 
         // Observer les vidéos déjà présentes
