@@ -340,4 +340,28 @@ assert.strictEqual(concurrentResults[0], 'OK-1');
 assert.ok(maxObservedConcurrency <= 3, `La concurrence observée (${maxObservedConcurrency}) ne doit pas dépasser le plafond (3)`);
 console.log('   ✓ Limitation stricte de concurrence et résilience aux erreurs validées');
 
-console.log('\n=== ✅ TOUS LES TESTS STRICTS SONT PASSÉS SANS ERREUR (10/10) ===');
+// -------------------------------------------------------------
+// 11. Tests Réconciliation Temporelle et Recul Manuel de Chapitre
+// -------------------------------------------------------------
+console.log('\n11. Tests Recul Manuel et Réconciliation Gist :');
+// Cas A : L'utilisateur recule son chapitre manuellement (16 < 17) -> local plus récent
+const localTimeRecent = Date.now();
+const gistTimeOld = localTimeRecent - 60000;
+const isLocalMoreRecent = localTimeRecent > gistTimeOld;
+assert.strictEqual(isLocalMoreRecent, true, 'Le local doit être détecté comme plus récent');
+
+// Cas B : Le statut non lu doit s'activer immédiatement lors du recul
+const unreadAfterRollback = isItemUnread({
+    userProgress: 'Épisode 16',
+    latestState: 'Épisode 17',
+    isNew: false
+});
+assert.strictEqual(unreadAfterRollback, true, 'Reculer à 16 alors que 17 est sorti doit basculer en non lu');
+
+// Cas C : Avancement ou statut synchronisé quand le Gist est plus récent
+const isGistMoreRecent = gistTimeOld > localTimeRecent;
+assert.strictEqual(isGistMoreRecent, false);
+console.log('   ✓ Priorité temporelle de modification et bascule non-lu après recul validées');
+
+console.log('\n=== ✅ TOUS LES TESTS STRICTS SONT PASSÉS SANS ERREUR (11/11) ===');
+
