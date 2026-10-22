@@ -2,7 +2,7 @@
  * @fileoverview Contrôleur de l'interface utilisateur de la Popup pour Check Anime & Scans.
  */
 
-import { decodeHTMLEntities, cleanStateDisplay, updateBadgeCount, formatRelativeTime, isItemUnread } from '../utils.js';
+import { decodeHTMLEntities, cleanStateDisplay, updateBadgeCount, formatRelativeTime, isItemUnread, extractEpisodeNumber } from '../utils.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Affichage dynamique de la version synchronisée
@@ -29,12 +29,94 @@ document.addEventListener('DOMContentLoaded', () => {
     const sortToggleBtn = document.getElementById('sort-toggle-btn');
     const sortLabel = document.getElementById('sort-label');
 
+    // Dialogue Modal de Modification d'avancement
+    const chapterDialog = document.getElementById('chapter-dialog');
+    const chapterForm = document.getElementById('chapter-form');
+    const closeChapterDialogBtn = document.getElementById('close-chapter-dialog-btn');
+    const cancelChapterDialogBtn = document.getElementById('cancel-chapter-dialog-btn');
+    const chapterTargetKey = document.getElementById('chapter-target-key');
+    const chapterNumberInput = document.getElementById('chapter-number-input');
+    const chapterDialogTitle = document.getElementById('chapter-dialog-title');
+
     /** @type {Record<string, any>} */
     let currentUpdates = {};
 
     // Mode de tri actif : 'date' par défaut (mémorisée en localStorage)
     let currentSort = localStorage.getItem('check_scans_popup_sort') || 'date';
     updateSortUI();
+
+    /**
+     * Ouvre la boîte de dialogue pour éditer manuellement la progression
+     * @param {string} key 
+     * @param {any} item 
+     */
+    function openChapterEditModal(key, item) {
+        if (!chapterDialog) return;
+        if (chapterDialogTitle) {
+            chapterDialogTitle.textContent = `Modifier : ${item.title || 'Média'}`;
+        }
+        if (chapterTargetKey) {
+            chapterTargetKey.value = key;
+        }
+        const currentNum = extractEpisodeNumber(item.userProgress || item.latestState);
+        if (chapterNumberInput) {
+            chapterNumberInput.value = currentNum > 0 ? currentNum : '';
+        }
+        if (typeof chapterDialog.showModal === 'function') {
+            chapterDialog.showModal();
+            chapterNumberInput?.focus();
+        }
+    }
+
+    /**
+     * Ferme la boîte de dialogue de modification
+     */
+    function closeChapterEditModal() {
+        if (chapterDialog && chapterDialog.open) {
+            chapterDialog.close();
+        }
+    }
+
+    if (closeChapterDialogBtn) {
+        closeChapterDialogBtn.addEventListener('click', closeChapterEditModal);
+    }
+    if (cancelChapterDialogBtn) {
+        cancelChapterDialogBtn.addEventListener('click', closeChapterEditModal);
+    }
+    if (chapterDialog) {
+        chapterDialog.addEventListener('click', (e) => {
+            if (e.target === chapterDialog) {
+                closeChapterEditModal();
+            }
+        });
+    }
+
+    if (chapterForm) {
+        chapterForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const targetKey = chapterTargetKey?.value;
+            const newNum = chapterNumberInput?.value.trim();
+
+            if (targetKey && newNum !== '' && currentUpdates[targetKey]) {
+                const item = currentUpdates[targetKey];
+                const isAnime = (item.category || '').toUpperCase() === 'ANIMES' || (item.userProgress || item.latestState || '').toLowerCase().includes('épisode');
+                const newProgress = isAnime ? `Épisode ${newNum}` : `Chapitre ${newNum}`;
+
+                closeChapterEditModal();
+
+                const newData = { ...currentUpdates };
+                newData[targetKey].userProgress = newProgress;
+                newData[targetKey].updatedAt = Date.now();
+                newData[targetKey].isNew = isItemUnread(newData[targetKey]);
+
+                await chrome.storage.local.set(newData);
+                await updateBadgeCount(newData);
+                currentUpdates = newData;
+                renderList(newData, searchInput.value.toLowerCase().trim());
+                chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
+            }
+        });
+    }
 
     // Gestion du basculement de tri Date <-> A-Z
     if (sortToggleBtn) {
@@ -121,10 +203,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 newData[key].isNew = false;
                 newData[key].previousProgress = newData[key].userProgress;
                 newData[key].userProgress = newData[key].latestState || newData[key].userProgress;
+                newData[key].updatedAt = Date.now();
             }
         }
         await chrome.storage.local.set(newData);
         await updateBadgeCount(newData);
+        currentUpdates = newData;
         renderList(newData, searchInput.value.toLowerCase().trim());
         chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
     });
@@ -252,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
             img.className = 'item-cover';
             img.loading = 'lazy';
             img.alt = '';
-            img.onerror = () => { img.style.display = 'none'; };
+            img.onerror = () => { img.classList.add('hidden'); };
             a.appendChild(img);
         }
 
@@ -273,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const cleanLat = cleanStateDisplay(item.latestState);
 
             const progSpan = document.createElement('span');
-            progSpan.style.color = 'var(--text-muted)';
+            progSpan.className = 'prog-prev';
             progSpan.textContent = `${cleanProg} ➔ `;
 
             const latestB = document.createElement('b');
@@ -285,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const cleanLat = cleanStateDisplay(item.latestState);
 
             const progSpan = document.createElement('span');
-            progSpan.style.color = 'var(--text-muted)';
+            progSpan.className = 'prog-prev';
             progSpan.textContent = `Non commencé ➔ `;
 
             const latestB = document.createElement('b');
@@ -315,13 +399,26 @@ document.addEventListener('DOMContentLoaded', () => {
         infoDiv.appendChild(metaDiv);
         a.appendChild(infoDiv);
 
-        // Actions (Marquer comme lu / Annuler)
+        // Actions (Édition manuelle / Marquer comme lu / Annuler)
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'update-actions';
-        let hasActions = false;
+
+        // Bouton d'édition d'avancement manuel (crayon)
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-edit-progress';
+        editBtn.title = 'Modifier l’avancement';
+        editBtn.setAttribute('aria-label', `Modifier l’avancement de ${item.title}`);
+        editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
+
+        editBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openChapterEditModal(key, item);
+        });
+
+        actionsDiv.appendChild(editBtn);
 
         if (unread) {
-            hasActions = true;
             const markBtn = document.createElement('button');
             markBtn.className = 'btn-mark-read';
             markBtn.title = 'Marquer comme lu';
@@ -336,16 +433,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 newData[key].isNew = false;
                 newData[key].previousProgress = newData[key].userProgress;
                 newData[key].userProgress = newData[key].latestState;
+                newData[key].updatedAt = Date.now();
 
                 await chrome.storage.local.set(newData);
                 await updateBadgeCount(newData);
+                currentUpdates = newData;
                 renderList(newData, searchInput.value.toLowerCase().trim());
                 chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
             });
 
             actionsDiv.appendChild(markBtn);
         } else if (item.previousProgress && item.userProgress !== item.previousProgress) {
-            hasActions = true;
             const undoBtn = document.createElement('button');
             undoBtn.className = 'btn-undo-read';
             undoBtn.title = 'Annuler et restaurer';
@@ -358,10 +456,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const newData = { ...currentUpdates };
                 newData[key].userProgress = newData[key].previousProgress;
-                newData[key].isNew = true;
+                newData[key].isNew = isItemUnread(newData[key]);
+                newData[key].updatedAt = Date.now();
 
                 await chrome.storage.local.set(newData);
                 await updateBadgeCount(newData);
+                currentUpdates = newData;
                 renderList(newData, searchInput.value.toLowerCase().trim());
                 chrome.runtime.sendMessage({ action: 'syncGist' }).catch(() => {});
             });
@@ -369,9 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
             actionsDiv.appendChild(undoBtn);
         }
 
-        if (hasActions) {
-            a.appendChild(actionsDiv);
-        }
+        a.appendChild(actionsDiv);
 
         li.appendChild(a);
         return li;

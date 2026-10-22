@@ -361,29 +361,7 @@
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'cas-reading-toast';
-            toast.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 9999999;
-                background: rgba(15, 23, 42, 0.94);
-                color: #38bdf8;
-                border: 1px solid rgba(56, 189, 248, 0.4);
-                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-                backdrop-filter: blur(8px);
-                padding: 12px 18px;
-                border-radius: 10px;
-                font-family: system-ui, -apple-system, sans-serif;
-                font-size: 14px;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                transition: opacity 0.3s ease, transform 0.3s ease;
-                opacity: 0;
-                transform: translateY(-10px);
-                pointer-events: none;
-            `;
+            toast.className = 'cas-reading-toast';
             document.body.appendChild(toast);
         }
 
@@ -393,13 +371,11 @@
             </svg>
             <span>${text}</span>
         `;
-        toast.style.opacity = '1';
-        toast.style.transform = 'translateY(0)';
+        toast.classList.add('is-visible');
 
         clearTimeout(toast._hideTimer);
         toast._hideTimer = setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateY(-10px)';
+            toast.classList.remove('is-visible');
         }, 3500);
     }
 

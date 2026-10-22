@@ -82,6 +82,28 @@
         <button id="mark-all-read-btn" class="btn-primary" disabled>Tout marquer comme lu</button>
     </footer>
 
+    <!-- Dialogue Modal de Modification Manuelle de Progression -->
+    <dialog id="chapter-dialog" class="modal-dialog">
+        <form method="dialog" id="chapter-form" class="modal-form">
+            <div class="modal-header">
+                <h2 id="chapter-dialog-title">Modifier l’avancement</h2>
+                <button type="button" id="close-chapter-dialog-btn" class="icon-btn-close" aria-label="Fermer">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="chapter-target-key">
+                <div class="form-field">
+                    <label for="chapter-number-input">Dernier numéro vu ou lu :</label>
+                    <input type="number" id="chapter-number-input" class="form-input" min="0" step="any" required placeholder="ex: 16">
+                    <span class="field-note">Ajustez votre progression pour synchroniser votre suivi.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="cancel-chapter-dialog-btn" class="btn-secondary">Annuler</button>
+                <button type="submit" class="btn-primary-dialog">Valider</button>
+            </div>
+        </form>
+    </dialog>
+
     <script type="module" src="popup.js"></script>
 </body>
 </html>

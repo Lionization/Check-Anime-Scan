@@ -241,6 +241,7 @@ async function handleMarkAsRead(request, sender) {
 
         if (matchedItem && matchedKey) {
             matchedItem.userProgress = progressText || matchedItem.latestState;
+            matchedItem.updatedAt = Date.now();
             
             const numUser = extractEpisodeNumber(matchedItem.userProgress);
             const numLatest = extractEpisodeNumber(matchedItem.latestState);

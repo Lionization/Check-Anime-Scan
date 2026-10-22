@@ -1,6 +1,6 @@
 {
   "name": "check-anime-scan",
-  "version": "2.2.5",
+  "version": "2.2.6",
   "description": "Extension Google Chrome pour suivre et vérifier automatiquement les sorties d'animes et de scans.",
   "type": "module",
   "scripts": {
