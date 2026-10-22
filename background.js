@@ -154,6 +154,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     
+    if (request.action === 'isTabMonitored') {
+        const tabUrl = sender.tab ? sender.tab.url : '';
+        if (!tabUrl) {
+            sendResponse({ monitored: false });
+            return false;
+        }
+        chrome.storage.local.get(null).then((data) => {
+            let isMonitored = false;
+            for (const key in data) {
+                const item = data[key];
+                if (item?.url && isMatchingBookmarkUrl(item.url, tabUrl)) {
+                    isMonitored = true;
+                    break;
+                }
+            }
+            sendResponse({ monitored: isMonitored });
+        }).catch(() => {
+            sendResponse({ monitored: false });
+        });
+        return true;
+    }
+
     if (request.action === 'markAsRead' || request.action === 'markAsReadVideo') {
         handleMarkAsRead(request, sender);
     }

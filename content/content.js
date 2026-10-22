@@ -10,19 +10,10 @@
     const isAnimeSama = currentUrl.includes('anime-sama');
     const isTopFrame = window.self === window.top;
 
-    // 0. FILTRAGE STRICT DU CONTEXTE D'EXÉCUTION (Évite de tourner sur le reste du web)
+    // 0. FILTRAGE STRICT DU CONTEXTE D'EXÉCUTION
     if (isTopFrame) {
         if (!isAnimeSama && !isWebtoons && !isMangago) {
             return; // Fenêtre principale hors du périmètre : arrêt immédiat
-        }
-    } else {
-        // En sous-frame (iframe) : restreint aux lecteurs embarqués par Anime-Sama ou domaines de streaming connus
-        const hasAnimeSamaReferrer = typeof document.referrer === 'string' && document.referrer.includes('anime-sama');
-        const hasAnimeSamaAncestor = window.location.ancestorOrigins && Array.from(window.location.ancestorOrigins).some(origin => origin.includes('anime-sama'));
-        const isKnownVideoHost = /ansembed|sendvid|sibnet|vidmoly|myvi|dood|streamtape|vk\.com|uqload|player/i.test(currentUrl);
-        
-        if (!hasAnimeSamaReferrer && !hasAnimeSamaAncestor && !isAnimeSama && !isKnownVideoHost) {
-            return; // Iframe tierce non liée au streaming Anime-Sama : arrêt immédiat
         }
     }
 
@@ -39,14 +30,29 @@
     // 2. MODE NORMAL : Suivi de lecture utilisateur
     let markedAsRead = false;
 
-    if (isTopFrame && (isWebtoons || isMangago || isAnimeSama)) {
+    if (isTopFrame) {
         initScrollTracker();
-        initAnimeSamaMessageListener();
-    }
+        if (isAnimeSama) {
+            initAnimeSamaMessageListener();
+            initVideoTracker();
+        }
+    } else {
+        // En sous-frame (iframe) : gestion générique sans aucune liste d'hébergeurs en dur.
+        // Étape 1 : détection synchrone via l'origine parente (Chromium ancestorOrigins ou document.referrer)
+        const hasAnimeSamaReferrer = typeof document.referrer === 'string' && document.referrer.includes('anime-sama');
+        const hasAnimeSamaAncestor = window.location.ancestorOrigins && Array.from(window.location.ancestorOrigins).some(origin => origin.includes('anime-sama'));
 
-    // Le tracker vidéo ne s'exécute que dans le contexte Anime-Sama (page hôte ou iframes associées)
-    if (isAnimeSama || !isTopFrame) {
-        initVideoTracker();
+        if (hasAnimeSamaReferrer || hasAnimeSamaAncestor || isAnimeSama) {
+            initVideoTracker();
+        } else {
+            // Étape 2 : détection dynamique via le Service Worker pour tout hébergeur actuel ou futur,
+            // même en cas de Referrer-Policy restreinte ou d'origine cross-domaine opaque
+            safeSendMessage({ action: 'isTabMonitored' }, (response) => {
+                if (response?.monitored) {
+                    initVideoTracker();
+                }
+            });
+        }
     }
 
     /**
@@ -376,7 +382,7 @@
         clearTimeout(toast._hideTimer);
         toast._hideTimer = setTimeout(() => {
             toast.classList.remove('is-visible');
-        }, 3500);
+        }, 3000);
     }
 
     /**
