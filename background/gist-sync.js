@@ -237,16 +237,28 @@ export async function syncStorageWithGist() {
                 itemChanged = true;
             }
 
-            // Si la progression du Gist est plus avancée que le local OU si le Gist a été modifié plus récemment (ex: recul manuel de chapitre dans la PWA)
+            // Prise en compte de la temporalité : l'action la plus récente l'emporte, qu'il s'agisse d'une avancée ou d'un recul manuel
             const gistTime = gistItem.updatedAt || gistItem.timestamp || 0;
             const localTime = localItem.updatedAt || localItem.timestamp || 0;
             const isGistMoreRecent = gistTime > localTime;
+            const isLocalMoreRecent = localTime > gistTime;
 
-            if (gistProgressNum > localProgressNum || (!localItem.userProgress && gistItem.userProgress) || (isGistMoreRecent && gistItem.userProgress && gistItem.userProgress !== localItem.userProgress)) {
-                localItem.userProgress = gistItem.userProgress;
-                localItem.updatedAt = gistTime || Date.now();
-                itemChanged = true;
+            if (isGistMoreRecent) {
+                // Le Gist a été modifié plus récemment (ex: action utilisateur sur PWA / mobile)
+                if (gistItem.userProgress && gistItem.userProgress !== localItem.userProgress) {
+                    localItem.userProgress = gistItem.userProgress;
+                    localItem.updatedAt = gistTime;
+                    itemChanged = true;
+                }
+            } else if (!isLocalMoreRecent) {
+                // En l'absence d'antériorité claire (temps égaux ou nuls) :
+                if (gistProgressNum > localProgressNum || (!localItem.userProgress && gistItem.userProgress)) {
+                    localItem.userProgress = gistItem.userProgress;
+                    localItem.updatedAt = gistTime || Date.now();
+                    itemChanged = true;
+                }
             }
+            // Si isLocalMoreRecent : le local prime, interdiction absolue d'écraser la progression locale avec le Gist
 
             // Recalcul et réconciliation de l'indicateur isNew basé sur la règle unifiée
             const expectedIsNew = isItemUnread(localItem);
@@ -288,9 +300,26 @@ export async function syncStorageWithGist() {
         const localLatestNum = extractEpisodeNumber(localItem.latestState);
         const gistLatestNum = extractEpisodeNumber(existingGist.latestState);
 
-        // Détermination du flag isNew : ne pas écraser une lecture mobile validée (isNew: false)
+        const localTime = localItem.updatedAt || localItem.timestamp || 0;
+        const gistTime = existingGist.updatedAt || existingGist.timestamp || 0;
+        const isLocalMoreRecent = localTime > gistTime;
+        const isGistMoreRecent = gistTime > localTime;
+
+        // Détermination de la progression à persister sur le Gist
+        let resolvedUserProgress = existingGist.userProgress || '';
+        if (isLocalMoreRecent) {
+            resolvedUserProgress = localItem.userProgress || '';
+        } else if (isGistMoreRecent) {
+            resolvedUserProgress = existingGist.userProgress || localItem.userProgress || '';
+        } else {
+            resolvedUserProgress = localProgressNum >= gistProgressNum ? (localItem.userProgress || '') : (existingGist.userProgress || '');
+        }
+
+        // Détermination du flag isNew
         let resolvedIsNew = localItem.isNew || false;
-        if (localLatestNum > gistLatestNum) {
+        if (isLocalMoreRecent) {
+            resolvedIsNew = isItemUnread(localItem);
+        } else if (localLatestNum > gistLatestNum) {
             resolvedIsNew = true;
         } else if (existingGist.isNew === false && gistProgressNum >= localProgressNum && localLatestNum <= gistLatestNum) {
             resolvedIsNew = false;
@@ -298,15 +327,11 @@ export async function syncStorageWithGist() {
             resolvedIsNew = false;
         }
 
-        const localTime = localItem.updatedAt || localItem.timestamp || 0;
-        const gistTime = existingGist.updatedAt || existingGist.timestamp || 0;
-        const preferGistProgress = (gistTime > localTime) && Boolean(existingGist.userProgress);
-
         const shouldUpdateGist = 
             !mergedGistItems[normKey] ||
             oldGistKey !== normKey ||
+            (isLocalMoreRecent && localItem.userProgress !== existingGist.userProgress) ||
             localLatestNum > gistLatestNum ||
-            (localProgressNum > gistProgressNum && !preferGistProgress) ||
             localItem.latestState !== existingGist.latestState ||
             resolvedIsNew !== existingGist.isNew ||
             (!existingGist.image && localItem.image);
@@ -321,7 +346,7 @@ export async function syncStorageWithGist() {
                 title: localItem.title,
                 url: localItem.url,
                 category: localItem.category || 'SCANS',
-                userProgress: preferGistProgress ? existingGist.userProgress : (localProgressNum >= gistProgressNum ? (localItem.userProgress || '') : (existingGist.userProgress || '')),
+                userProgress: resolvedUserProgress,
                 latestState: localItem.latestState || existingGist.latestState || '',
                 isNew: resolvedIsNew,
                 image: localItem.image || existingGist.image || null,
