@@ -183,15 +183,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Rafraîchissement manuel
-    refreshBtn.addEventListener('click', async () => {
+    refreshBtn.addEventListener('click', () => {
         setLoading(true);
         refreshBtn.disabled = true;
         
-        chrome.runtime.sendMessage({ action: 'forceCheck' }, () => {
-            setTimeout(async () => {
-                await loadData();
-                refreshBtn.disabled = false;
-            }, 500);
+        chrome.runtime.sendMessage({ action: 'forceCheck' }, async () => {
+            await loadData();
+            refreshBtn.disabled = false;
         });
     });
 

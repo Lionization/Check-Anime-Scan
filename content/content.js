@@ -499,16 +499,5 @@
                 }
             });
         }
-
-        // Vérification de secours périodique pendant les premières secondes
-        let checkCount = 0;
-        const backupInterval = setInterval(() => {
-            if (!chrome?.runtime?.id) {
-                clearInterval(backupInterval);
-                return;
-            }
-            document.querySelectorAll('video').forEach(attachToVideo);
-            if (++checkCount >= 10) clearInterval(backupInterval);
-        }, 2000);
     }
 })();
