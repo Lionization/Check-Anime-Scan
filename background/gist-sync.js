@@ -55,8 +55,9 @@ export async function fetchGistData(gistId, token) {
     if (!gistId || !token) return null;
 
     try {
-        const response = await fetch(`${GITHUB_API_URL}/${gistId.trim()}`, {
+        const response = await fetch(`${GITHUB_API_URL}/${gistId.trim()}?_t=${Date.now()}`, {
             method: 'GET',
+            cache: 'no-store',
             headers: {
                 'Authorization': `Bearer ${token.trim()}`,
                 'Accept': 'application/vnd.github+json',
