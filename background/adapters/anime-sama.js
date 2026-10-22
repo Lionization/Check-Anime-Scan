@@ -164,27 +164,49 @@ export function extractEpsMaxEpisode(code) {
  */
 export function extractAnimeSamaSeasonUrls(htmlText, baseUrl, preferScan = false) {
     if (!htmlText || typeof htmlText !== 'string' || !baseUrl) return [];
-    const seasonPatterns = [
-        /href=["'](\/catalogue\/[^"']+\/(?:saison\d+|scan)\/[^"']*)["']/gi,
-        /href=["']((?:saison\d+|scan)\/[^"']*)["']/gi,
-        /panneauAnime\s*\(\s*['"]([^'"]*(?:saison\d+|scan)[^'"]*)['"]/gi,
-        /['"]((?:saison\d+|scan)\/[^"']*)['"]/gi
-    ];
     const found = [];
-    for (const pattern of seasonPatterns) {
-        let match;
-        while ((match = pattern.exec(htmlText)) !== null) {
-            const rawPath = match[1];
-            try {
-                const fullUrl = new URL(rawPath, baseUrl).href;
-                if (!found.includes(fullUrl)) {
-                    found.push(fullUrl);
-                }
-            } catch {
-                // Ignore URL invalide
+
+    const addUrl = (rawPath) => {
+        if (!rawPath) return;
+        try {
+            const cleanPath = rawPath.trim();
+            const fullUrl = new URL(cleanPath, baseUrl).href;
+            if (!found.includes(fullUrl)) {
+                found.push(fullUrl);
             }
+            // Si l'URL s'arrête à saisonX sans langue, proposer aussi saisonX/vostfr/ en priorité
+            const seasonOnlyMatch = fullUrl.match(/^(.*\/saison\d+)\/?$/i);
+            if (seasonOnlyMatch) {
+                const vostfrUrl = `${seasonOnlyMatch[1]}/vostfr/`;
+                if (!found.includes(vostfrUrl)) {
+                    found.push(vostfrUrl);
+                }
+            }
+        } catch {
+            // Ignore URL invalide
+        }
+    };
+
+    // 1. panneauAnime avec 2 arguments : panneauAnime('saison1', 'vostfr')
+    const panneau2Args = /panneauAnime\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/gi;
+    let match;
+    while ((match = panneau2Args.exec(htmlText)) !== null) {
+        addUrl(`${match[1]}/${match[2]}/`);
+    }
+
+    // 2. Patterns de liens href et attributs
+    const seasonPatterns = [
+        /href=["']([^"']*(?:saison\d+|scan)[^"']*)["']/gi,
+        /panneauAnime\s*\(\s*['"]([^'"]*(?:saison\d+|scan)[^'"]*)['"]/gi,
+        /carteAnime\s*\(\s*['"]([^'"]*(?:saison\d+|scan)[^'"]*)['"]/gi,
+        /['"]([^'"]*(?:saison\d+|scan)\/[^"']*)['"]/gi
+    ];
+    for (const pattern of seasonPatterns) {
+        while ((match = pattern.exec(htmlText)) !== null) {
+            addUrl(match[1]);
         }
     }
+
     return found.sort((a, b) => {
         const isScanA = a.includes('/scan');
         const isScanB = b.includes('/scan');
